@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { isCoreSubject } from "./constants";
 import type { DayId, Lesson, Room, ScheduleData, SchoolClass, Teacher } from "./types";
 
 const SKIP =
@@ -152,15 +153,17 @@ function parseCell(raw: string): Omit<Lesson, "id" | "day" | "periodId" | "teach
   }
   subject = subject.replace(/[,，]/g, " ").replace(/\s+/g, " ").trim() || (isMeeting ? blob : "課堂");
 
+  const looksGrouped =
+    !isMeeting &&
+    !isCoreSubject(subject) &&
+    (classIds.length > 1 || classIds.some((x) => /G\d|IAL/.test(x)));
+
   return {
     classIds,
     subject,
     roomId,
-    note: isMeeting
-      ? undefined
-      : classIds.length > 1 || classIds.some((x) => /G\d|IAL/.test(x))
-        ? "分組／選修"
-        : undefined,
+    // 核心科（如公民）即使合班上亦唔標「分組／選修」，避免調堂誤判
+    note: looksGrouped ? "分組／選修" : undefined,
     kind: isMeeting ? "meeting" : "lesson",
   };
 }

@@ -1,7 +1,13 @@
-import { COVER_PERIOD_IDS, periodLabel as periodLabelFromConstants } from "./constants";
+import {
+  COVER_PERIOD_IDS,
+  isCoreSubject,
+  periodLabel as periodLabelFromConstants,
+} from "./constants";
 import { weekdayFromIsoDate } from "./cover";
 import { classTokenMatches, substituteCandidates } from "./queries";
 import type { DayId, Lesson, ScheduleData } from "./types";
+
+export { isCoreSubject };
 
 export type SwapUnitKind = "normal" | "ial_bundle" | "elective_blocked";
 
@@ -122,16 +128,19 @@ export function ialBlockLessons(data: ScheduleData, lesson: Lesson): Lesson[] {
   return parallelLessonsForClass(data, lesson.day, lesson.periodId, classId).filter(lessonHasIal);
 }
 
-/** 非 IAL 高中選修：同班同時段有其他分組課 → 不能單獨調堂 */
+/** 非 IAL 高中選修：本身係分組／選修課，且同班同時段有其他分組課 → 不能單獨調堂 */
 export function isBlockedElective(data: ScheduleData, lesson: Lesson): boolean {
   if (lessonHasIal(lesson)) return false;
+  // 核心科（例如公民科）唔係選修，唔好因為同時段有選修資料就鎖死調堂
+  if (isCoreSubject(lesson.subject)) return false;
+  // 只封鎖「本身」標咗分組／選修嘅課；無標記嘅課唔應被並行選修連坐
   const marked = Boolean(lesson.note && lesson.note.includes("分組"));
+  if (!marked) return false;
   for (const classId of lesson.classIds) {
     const parallel = parallelLessonsForClass(data, lesson.day, lesson.periodId, classId);
-    const others = parallel.filter((l) => l.id !== lesson.id);
+    const others = parallel.filter((l) => l.id !== lesson.id && !isCoreSubject(l.subject));
     if (others.length === 0) continue;
     const electiveLike =
-      marked ||
       others.some((l) => l.note?.includes("分組")) ||
       others.some((l) => l.subject !== lesson.subject);
     if (electiveLike) return true;
