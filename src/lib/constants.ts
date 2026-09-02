@@ -150,6 +150,25 @@ export function subjectClass(subject: string): string {
   return SUBJECT_COLORS[subject] ?? "bg-muted text-foreground border-border";
 }
 
+/**
+ * 核心／必修科（非選修）。用於調堂時避免將公民等核心科誤判為「選修並行」。
+ * 科目名以時間表常見寫法／簡稱為準。
+ */
+export function isCoreSubject(subject: string): boolean {
+  const s = subject.replace(/\s+/g, "");
+  if (!s) return false;
+  // CLP 備課／會議唔當核心課堂
+  if (/CLP/i.test(s)) return false;
+  // 公民與社會發展（高中核心）、公民經濟與社會（初中核心）
+  if (s.includes("公民") || s.includes("公經社")) return true;
+  if (
+    /^(中文|中國語文|英文|英國語文|數學|數必|體育|普話|普通話|科學|重摘課)($|[（(])/.test(s)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export function dayLabel(day: DayId): string {
   return DAYS.find((d) => d.id === day)?.label ?? day;
 }
