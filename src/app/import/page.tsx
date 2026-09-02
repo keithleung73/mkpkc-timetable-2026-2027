@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
+import { StaticModeBanner } from "@/components/static-mode-banner";
 import { useSchedule } from "@/components/schedule-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -90,6 +91,7 @@ function Inner() {
 
   return (
     <div className="space-y-6">
+      <StaticModeBanner feature="匯入 Excel" />
       <Card>
         <CardHeader>
           <CardTitle>上載檔案</CardTitle>

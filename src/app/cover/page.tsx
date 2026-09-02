@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { FileDown, Repeat2 } from "lucide-react";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
+import { StaticModeBanner } from "@/components/static-mode-banner";
 import { useSchedule } from "@/components/schedule-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -218,6 +219,7 @@ function Inner() {
 
   return (
     <div className="space-y-6">
+      <StaticModeBanner feature="代堂編配／入帳" />
       {loadError ? (
         <p className="text-sm text-destructive">{loadError}</p>
       ) : null}

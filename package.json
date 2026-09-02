@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev --webpack --hostname 0.0.0.0 --port 43217",
     "build": "next build",
+    "build:pages": "node scripts/build-pages.mjs",
     "start": "next start --hostname 0.0.0.0 --port 43217",
     "lint": "eslint",
     "seed": "tsx scripts/import-official.ts",

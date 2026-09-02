@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SCHOOL_NAME, SCHOOL_YEAR } from "@/lib/constants";
+import { isStaticExport } from "@/lib/runtime";
 
 const NAV = [
   { href: "/", label: "總覽", icon: LayoutGrid },
@@ -81,7 +82,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-        <p className="px-5 py-4 text-xs text-white/50">本機試用 · timetable.mkpkc.local</p>
+        <p className="px-5 py-4 text-xs text-white/50">
+          {isStaticExport ? "網上唯讀版 · GitHub Pages" : "本機試用 · timetable.mkpkc.local"}
+        </p>
       </aside>
 
       <main className="min-w-0 flex-1">{children}</main>

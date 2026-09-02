@@ -16,6 +16,7 @@
 # next.js
 /.next/
 /out/
+/public/data/schedule.json
 
 # production
 /build

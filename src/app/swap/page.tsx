@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { ArrowLeftRight, Plus, Repeat2, X } from "lucide-react";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
+import { StaticModeBanner } from "@/components/static-mode-banner";
 import { useSchedule } from "@/components/schedule-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -104,6 +105,7 @@ function SwapInner() {
 
   return (
     <div className="space-y-6">
+      <StaticModeBanner feature="調堂建議（需 API）" />
       <Card>
         <CardHeader>
           <CardTitle>工作項目：老師事假／公假要調堂安排</CardTitle>

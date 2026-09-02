@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { scheduleDataUrl } from "@/lib/runtime";
 import type { ScheduleData } from "@/lib/types";
 
 type Ctx = {
@@ -18,7 +19,7 @@ const ScheduleContext = createContext<Ctx>({
 });
 
 async function fetchSchedule(): Promise<ScheduleData> {
-  const res = await fetch("/api/schedule", { cache: "no-store" });
+  const res = await fetch(scheduleDataUrl(), { cache: "no-store" });
   if (!res.ok) throw new Error("無法載入課表");
   return res.json();
 }

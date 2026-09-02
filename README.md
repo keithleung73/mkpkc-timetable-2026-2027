@@ -23,6 +23,16 @@
 - 會議同課後時段不列入代堂。確認入帳後會累計結餘；同一日再確認會覆蓋當日方案。
 - **匯出 PDF**：將當日方案輸出為學務「代堂調堂處理」橫向表格（日期、請假老師、代堂人、受影響科目）。
 
+## 網上唯讀版（GitHub Pages）
+
+部署後網址：
+
+https://keithleung73.github.io/mkpkc-timetable-2026-2027/
+
+可查老師／班別／空閒時段。代堂入帳、調堂 API、匯入 Excel 請用本機版。
+
+推送 `main` 會自動經 GitHub Actions 重新建置 Pages。
+
 ## 本機啟動
 
 需要 [Node.js 20+](https://nodejs.org)（LTS）。解壓後可雙擊 `本機啟動.bat`（Windows）或 `本機啟動.command`（Mac）。
