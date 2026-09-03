@@ -1,4 +1,5 @@
 import { COVER_PERIOD_IDS, periodLabel as periodLabelFromConstants } from "./constants";
+import { isTeachingLesson, lessonOccupiesTeacher } from "./lesson-kind";
 import type { DayId, Lesson, ScheduleData, Teacher } from "./types";
 
 export const MAX_OWN_LESSONS = 6;
@@ -162,9 +163,6 @@ export function coverPeriodIdsForDay(day: DayId): string[] {
   return [...COVER_PERIOD_IDS];
 }
 
-function isTeachingLesson(lesson: Lesson) {
-  return (lesson.kind ?? "lesson") === "lesson";
-}
 
 export function teachingLessonsOnDay(data: ScheduleData, teacherId: string, day: DayId) {
   return data.lessons.filter(
@@ -233,7 +231,11 @@ function periodIndex(day: DayId, periodId: string) {
 
 export function isOccupied(data: ScheduleData, teacherId: string, day: DayId, periodId: string) {
   return data.lessons.some(
-    (l) => l.day === day && l.periodId === periodId && l.teacherIds.includes(teacherId),
+    (l) =>
+      l.day === day &&
+      l.periodId === periodId &&
+      l.teacherIds.includes(teacherId) &&
+      lessonOccupiesTeacher(l),
   );
 }
 

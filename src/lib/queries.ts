@@ -1,5 +1,6 @@
 import type { DayId, Lesson, ScheduleData, Teacher } from "./types";
 import { ALL_TEACHING_PERIODS, DAYS, LESSON_PERIODS } from "./constants";
+import { lessonOccupiesTeacher } from "./lesson-kind";
 
 import { filterTeachers } from "./search";
 
@@ -68,7 +69,11 @@ export function weeklyLoad(data: ScheduleData, teacherId: string): number {
 export function isFree(data: ScheduleData, teacherId: string, day: DayId, periodId: string): boolean {
   if (periodId === "p9" && day === "fri") return true;
   return !data.lessons.some(
-    (l) => l.day === day && l.periodId === periodId && l.teacherIds.includes(teacherId),
+    (l) =>
+      l.day === day &&
+      l.periodId === periodId &&
+      l.teacherIds.includes(teacherId) &&
+      lessonOccupiesTeacher(l),
   );
 }
 

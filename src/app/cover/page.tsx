@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { FileDown, Repeat2 } from "lucide-react";
+import { FileDown, Minus, Plus, Repeat2 } from "lucide-react";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
 import { StaticModeBanner } from "@/components/static-mode-banner";
 import { useSchedule } from "@/components/schedule-provider";
@@ -38,13 +38,16 @@ import {
 } from "@/lib/cover";
 import { dayLabel, formatTimeRange, periodLabel } from "@/lib/constants";
 import { classNames, roomName } from "@/lib/queries";
+import type { ScheduleData, Teacher } from "@/lib/types";
 import { coverPdfFilename } from "@/lib/cover-pdf";
 import { filterTeachers, teacherEnglishLabels } from "@/lib/search";
+import { applyConfirmedSwaps, swapsAffectingDate, type ConfirmedSwap } from "@/lib/swap-records";
 import { cn } from "@/lib/utils";
 
 type CoverStorePayload = {
   balances: CoverBalances;
   plans: SavedCoverPlan[];
+  swaps?: ConfirmedSwap[];
 };
 
 export default function CoverPage() {
@@ -52,7 +55,7 @@ export default function CoverPage() {
     <PageBody>
       <PageHeader
         title="代堂編配"
-        description="勾選當日請假同事，系統按負數結餘（病假／請假較多）優先編配代堂。盡量避開指定同事，同一星期亦盡量唔連續代多過兩日。"
+        description="勾選當日請假同事，系統按已確認調堂後嘅課表編配代堂（唔再用原先空堂）。盡量避開指定同事，同一星期亦盡量唔連續代多過兩日。"
       />
       <ScheduleGate>
         <Inner />
@@ -69,6 +72,7 @@ function Inner() {
   const [balances, setBalances] = useState<CoverBalances>({});
   const [history, setHistory] = useState<SavedCoverPlan[]>([]);
   const [plan, setPlan] = useState<CoverPlan | null>(null);
+  const [swaps, setSwaps] = useState<ConfirmedSwap[]>([]);
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reason, setReason] = useState("請假");
@@ -86,6 +90,7 @@ function Inner() {
         if (cancelled) return;
         setBalances(json.balances ?? {});
         setHistory(json.plans ?? []);
+        setSwaps(json.swaps ?? []);
       })
       .catch((e) => {
         if (!cancelled) setLoadError(e instanceof Error ? e.message : "載入失敗");
@@ -100,6 +105,12 @@ function Inner() {
     [history, date],
   );
 
+  const effectiveData = useMemo(
+    () => (data ? applyConfirmedSwaps(data, date, swaps) : null),
+    [data, date, swaps],
+  );
+  const daySwaps = useMemo(() => swapsAffectingDate(swaps, date), [swaps, date]);
+
   const teachers = data?.teachers ?? [];
   const filtered = useMemo(
     () => filterTeachers(data?.teachers ?? [], q),
@@ -112,7 +123,7 @@ function Inner() {
     return [...selected, ...rest];
   }, [filtered, absentees]);
 
-  if (!data) return null;
+  if (!data || !effectiveData) return null;
 
   const toggle = (id: string) => {
     setAbsentees((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
@@ -128,7 +139,7 @@ function Inner() {
       toast.error("請先勾選請假同事");
       return;
     }
-    const next = generateCoverPlan(data, day, date, absentees, balances, history);
+    const next = generateCoverPlan(effectiveData, day, date, absentees, balances, history);
     setPlan(next);
     if (next.slots.length === 0) {
       toast.message("所選同事當日無需要代嘅堂");
@@ -152,6 +163,7 @@ function Inner() {
       if (!res.ok) throw new Error(json.error ?? "入帳失敗");
       setBalances(json.balances);
       setHistory(json.plans);
+      if (Array.isArray(json.swaps)) setSwaps(json.swaps);
       setPlan(null);
       toast.success("已將代堂結餘入帳");
     } catch (e) {
@@ -202,9 +214,30 @@ function Inner() {
       if (!res.ok) throw new Error(json.error ?? "撤銷失敗");
       setBalances(json.balances);
       setHistory(json.plans);
+      if (Array.isArray(json.swaps)) setSwaps(json.swaps);
       toast.success("已撤銷該日入帳");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "撤銷失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const adjustBalance = async (teacherId: string, delta: 1 | -1) => {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/cover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "adjustBalance", teacherId, delta }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "改結餘失敗");
+      setBalances(json.balances);
+      if (Array.isArray(json.swaps)) setSwaps(json.swaps);
+      toast.success(`已人手${delta > 0 ? "+1" : "−1"}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "改結餘失敗");
     } finally {
       setBusy(false);
     }
@@ -234,6 +267,7 @@ function Inner() {
           <p>病假／請假較多（結餘較負）者優先代堂，其後先睇當日原有堂數。</p>
           <p>當日原有課堂多於 {MAX_OWN_LESSONS} 節者不能代堂。</p>
           <p>同一人唔可以連續兩節代堂（例如代完第三節就不能代第四節）；同自己原本課堂相鄰則可以。</p>
+          <p>已確認調堂會改當日佔用：被調去上課嘅同事該節不能代堂。CLP 唔當正規課，唔擋調堂／代堂。</p>
           <p>
             盡量唔編：{COVER_AVOID_TEACHER_NAMES.join("、")}
             （無人可代時仍可編；亦可人手改派）。
@@ -317,6 +351,23 @@ function Inner() {
         </div>
       ) : null}
 
+      {day && daySwaps.length > 0 ? (
+        <div className="rounded-xl border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+          當日已套用 {daySwaps.length} 項已確認調堂；代堂空閒以調堂後課表為準。
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+            {daySwaps.map((s) => (
+              <li key={s.id}>
+                {s.leaveTeacherName} {s.leaveDate} {periodLabel(s.leavePeriodId)}
+                {" ⇄ "}
+                {s.partnerDate} {periodLabel(s.partnerPeriodId)}
+                {s.partnerTeacherNames.length ? `（${s.partnerTeacherNames.join("、")}）` : "（空堂／CLP）"}
+                {s.leaveSubjects.length ? ` · ${s.leaveSubjects.join("、")}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {!day ? (
         <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
           請揀星期一至五，先可以編代堂。
@@ -359,7 +410,7 @@ function Inner() {
               ) : (
                 listed.map((t) => {
                   const checked = absentees.includes(t.id);
-                  const own = teachingLessonsOnDay(data, t.id, day).length;
+                  const own = teachingLessonsOnDay(effectiveData, t.id, day).length;
                   const bal = balances[t.id] ?? 0;
                   return (
                     <label
@@ -412,6 +463,7 @@ function Inner() {
             ) : (
               <PlanTable
                 plan={plan}
+                scheduleData={effectiveData}
                 balances={balances}
                 history={history}
                 onChange={(next) => setPlan(next)}
@@ -428,11 +480,14 @@ function Inner() {
       <Card>
         <CardHeader>
           <CardTitle>代堂結餘</CardTitle>
-          <CardDescription>負數表示仍欠堂，正數表示已代過。以最負者優先派堂。</CardDescription>
+          <CardDescription>
+            負數表示仍欠堂，正數表示已代過。可人手 ±1 改記錄。
+          </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          <ManualBalanceAdjust teachers={teachers} busy={busy} onAdjust={adjustBalance} />
           {ranking.every((r) => r.balance === 0) ? (
-            <p className="text-sm text-muted-foreground">尚未入帳。確認方案後先會累計。</p>
+            <p className="text-sm text-muted-foreground">尚未入帳。確認方案後先會累計，亦可人手加減。</p>
           ) : (
             <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
               {ranking
@@ -440,13 +495,35 @@ function Inner() {
                 .map((r) => (
                   <div
                     key={r.teacher.id}
-                    className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
+                    className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
                   >
                     <span>
                       {r.teacher.name}
                       <span className="text-muted-foreground">（{r.teacher.code}）</span>
                     </span>
-                    <BalanceChip value={r.balance} />
+                    <span className="flex items-center gap-1">
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="size-7"
+                        disabled={busy}
+                        onClick={() => void adjustBalance(r.teacher.id, -1)}
+                        aria-label={`${r.teacher.name} 減 1`}
+                      >
+                        <Minus className="size-3.5" />
+                      </Button>
+                      <BalanceChip value={r.balance} />
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="size-7"
+                        disabled={busy}
+                        onClick={() => void adjustBalance(r.teacher.id, 1)}
+                        aria-label={`${r.teacher.name} 加 1`}
+                      >
+                        <Plus className="size-3.5" />
+                      </Button>
+                    </span>
                   </div>
                 ))}
             </div>
@@ -487,6 +564,63 @@ function Inner() {
   );
 }
 
+function ManualBalanceAdjust({
+  teachers,
+  busy,
+  onAdjust,
+}: {
+  teachers: Teacher[];
+  busy: boolean;
+  onAdjust: (teacherId: string, delta: 1 | -1) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [teacherId, setTeacherId] = useState("");
+  const filtered = useMemo(() => filterTeachers(teachers, q), [teachers, q]);
+  return (
+    <div className="flex flex-wrap items-end gap-2 rounded-lg border bg-muted/30 p-3">
+      <label className="grid gap-1 text-sm">
+        <span className="text-muted-foreground">人手改結餘</span>
+        <Input
+          className="w-44"
+          placeholder="搜尋老師"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+      </label>
+      <Select value={teacherId} onValueChange={(v) => setTeacherId(typeof v === "string" ? v : "")}>
+        <SelectTrigger className="w-52">
+          <SelectValue placeholder="選擇老師" />
+        </SelectTrigger>
+        <SelectContent className="max-h-72">
+          {filtered.map((t) => (
+            <SelectItem key={t.id} value={t.id}>
+              {t.name}（{t.code}）
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy || !teacherId}
+        onClick={() => onAdjust(teacherId, -1)}
+      >
+        <Minus />
+        −1
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy || !teacherId}
+        onClick={() => onAdjust(teacherId, 1)}
+      >
+        <Plus />
+        +1
+      </Button>
+    </div>
+  );
+}
+
 function BalanceChip({ value }: { value: number }) {
   const label = value > 0 ? `+${value}` : String(value);
   return (
@@ -501,6 +635,7 @@ function BalanceChip({ value }: { value: number }) {
 
 function PlanTable({
   plan,
+  scheduleData,
   balances,
   history,
   onChange,
@@ -510,6 +645,7 @@ function PlanTable({
   replaceHint,
 }: {
   plan: CoverPlan;
+  scheduleData: ScheduleData;
   balances: CoverBalances;
   history: SavedCoverPlan[];
   onChange: (plan: CoverPlan) => void;
@@ -518,8 +654,7 @@ function PlanTable({
   busy: boolean;
   replaceHint: boolean;
 }) {
-  const { data } = useSchedule();
-  if (!data) return null;
+  const data = scheduleData;
   const deltas = previewDeltas(plan);
   const absentees = new Set(plan.absentees);
   const pickCtx: CoverPickContext = {
