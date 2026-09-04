@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { eligibleCoverTeachers, generateCoverPlan, isOccupied } from "../src/lib/cover";
+import { readFileSync } from "node:fs";
+import { eligibleCoverTeachers, generateCoverPlan, isOccupied, teachingLessonsOnDay } from "../src/lib/cover";
 import { isFree } from "../src/lib/queries";
 import { isNonRegularLesson, lessonOccupiesTeacher } from "../src/lib/lesson-kind";
 import { planTeacherLeaveSwaps } from "../src/lib/swap";
@@ -76,31 +77,39 @@ const 乙 = teacher("乙", "乙老師");
 }
 
 {
-  // 陳振華 3/9（四）第七節 2D 數學，調去 10/9（四）第三節空堂
+  // 陳振華 3/9（四）第七節 2D 數學，調去 10/9（四）第四節空堂
   const data = schedule(
     [振, 甲, 乙],
     [
+      lesson("振-p1", "thu", "p1", "振"),
+      lesson("振-p2", "thu", "p2", "振"),
+      lesson("振-p3", "thu", "p3", "振"),
+      lesson("振-p5", "thu", "p5", "振"),
+      lesson("振-p6", "thu", "p6", "振"),
       lesson("振-2d", "thu", "p7", "振", { classIds: ["2D"], subject: "數學" }),
-      lesson("甲-p3", "thu", "p3", "甲", { classIds: ["1A"], subject: "英文" }),
+      lesson("振-p8", "thu", "p8", "振"),
+      lesson("甲-p4", "thu", "p4", "甲", { classIds: ["1A"], subject: "英文" }),
     ],
   );
-  assert.equal(isOccupied(data, "振", "thu", "p3"), false, "原先 10/9 第三節係空堂");
+  assert.equal(isOccupied(data, "振", "thu", "p4"), false, "原先 10/9 第四節係空堂");
+  assert.equal(teachingLessonsOnDay(data, "振", "thu").length, 7);
 
   const record = confirmedSwapManual(data, {
     leaveTeacherId: "振",
     leaveDate: "2026-09-03",
     leavePeriodId: "p7",
     partnerDate: "2026-09-10",
-    partnerPeriodId: "p3",
+    partnerPeriodId: "p4",
   });
   assert.ok(!("error" in record), "人手調去空堂應成功");
   if ("error" in record) throw new Error(String(record.error));
 
   const on10 = applyConfirmedSwaps(data, "2026-09-10", [record]);
-  assert.equal(isOccupied(on10, "振", "thu", "p3"), true, "調堂後 10/9 第三節有 2D 數學");
+  assert.equal(isOccupied(on10, "振", "thu", "p4"), true, "調堂後 10/9 第四節有 2D 數學");
+  assert.equal(teachingLessonsOnDay(on10, "振", "thu").length, 8, "10/9 變成 8 堂");
   assert.ok(
     on10.lessons.some(
-      (l) => l.periodId === "p3" && l.teacherIds.includes("振") && l.classIds.includes("2D"),
+      (l) => l.periodId === "p4" && l.teacherIds.includes("振") && l.classIds.includes("2D"),
     ),
   );
 
@@ -115,7 +124,7 @@ const 乙 = teacher("乙", "乙老師");
     new Set(["甲"]),
     { 振: -9, 乙: 0 },
     {
-      periodId: "p3",
+      periodId: "p4",
       classIds: ["1A"],
       subject: "英文",
       roomId: "201",
@@ -126,6 +135,42 @@ const 乙 = teacher("乙", "乙老師");
   );
   assert.ok(!list.some((x) => x.teacher.id === "振"), "有效課表下陳振華不在代堂名單");
   assert.ok(list.some((x) => x.teacher.id === "乙"));
+}
+
+{
+  const live = JSON.parse(readFileSync("data/schedule.json", "utf8")) as ScheduleData;
+  assert.equal(isOccupied(live, "振", "thu", "p4"), false, "正式課表：陳振華星期四第四節空堂");
+  assert.equal(teachingLessonsOnDay(live, "振", "thu").length, 7, "正式課表：星期四原有 7 堂");
+  const p7 = live.lessons.find(
+    (l) =>
+      l.day === "thu" &&
+      l.periodId === "p7" &&
+      l.teacherIds.includes("振") &&
+      l.classIds.includes("2D") &&
+      l.subject.includes("數學"),
+  );
+  assert.ok(p7, "3/9 第七節應有 2D 數學");
+  const record = confirmedSwapManual(live, {
+    leaveTeacherId: "振",
+    leaveDate: "2026-09-03",
+    leavePeriodId: "p7",
+    partnerDate: "2026-09-10",
+    partnerPeriodId: "p4",
+  });
+  assert.ok(!("error" in record), String((record as { error?: string }).error ?? ""));
+  if ("error" in record) throw new Error(record.error);
+  const on10 = applyConfirmedSwaps(live, "2026-09-10", [record]);
+  assert.equal(teachingLessonsOnDay(on10, "振", "thu").length, 8, "調去第四節後 10/9 有 8 堂");
+  assert.equal(isOccupied(on10, "振", "thu", "p4"), true);
+  const plan = generateCoverPlan(on10, "thu", "2026-09-10", ["曹"], {});
+  assert.ok(
+    !plan.assignments.some((a) => a.coverTeacherId === "振"),
+    "曹思思 10/9 請假時，不應派陳振華代堂",
+  );
+  const p4Slot = plan.slots.find((s) => s.periodId === "p4" && s.teacherId === "曹");
+  assert.ok(p4Slot, "曹思思星期四第四節有課需代");
+  const p4Eligible = eligibleCoverTeachers(on10, "thu", new Set(["曹"]), {}, p4Slot, []);
+  assert.ok(!p4Eligible.some((x) => x.teacher.id === "振"), "第四節候選名單沒有陳振華");
 }
 
 {
@@ -183,7 +228,7 @@ const 乙 = teacher("乙", "乙老師");
     leaveClassIds: ["2D"],
     partnerDate: "2026-09-10",
     partnerDay: "thu",
-    partnerPeriodId: "p3",
+    partnerPeriodId: "p4",
     partnerTeacherIds: [],
     partnerTeacherNames: [],
     partnerLessonIds: [],

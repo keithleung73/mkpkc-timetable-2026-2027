@@ -57,7 +57,7 @@ export default function CoverPage() {
     <PageBody>
       <PageHeader
         title="代堂編配"
-        description="勾選當日請假同事，系統按負數結餘（病假／請假較多）優先編配代堂。盡量避開指定同事，同一星期亦盡量唔連續代多過兩日。"
+        description="勾選當日請假同事，系統按已確認調堂後嘅課表編配代堂（唔再用原先空堂）。盡量避開指定同事，同一星期亦盡量唔連續代多過兩日。"
       />
       <ScheduleGate>
         <Inner />
