@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowLeftRight, Plus, Repeat2, X } from "lucide-react";
+import { ArrowLeftRight, Check, Plus, Repeat2, Trash2, X } from "lucide-react";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
 import { StaticModeBanner } from "@/components/static-mode-banner";
 import { useSchedule } from "@/components/schedule-provider";
@@ -18,11 +18,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { dayLabel, formatTimeRange, periodLabel } from "@/lib/constants";
+import { COVER_PERIOD_IDS, dayLabel, formatTimeRange, periodLabel } from "@/lib/constants";
 import { hkTodayIso, weekdayFromIsoDate } from "@/lib/cover";
 import { classNames, roomName } from "@/lib/queries";
 import { filterTeachers } from "@/lib/search";
 import type { SwapPlan, SwapUnitResult } from "@/lib/swap";
+import { swapRecordKey, type ConfirmedSwap } from "@/lib/swap-records";
 import { cn } from "@/lib/utils";
 
 export default function SwapPage() {
@@ -30,7 +31,7 @@ export default function SwapPage() {
     <PageBody>
       <PageHeader
         title="調堂安排"
-        description="老師事假／公假要調堂：可揀多日請假、指定由邊日開始搵調堂；IAL 選修會一拼調；調唔到會畀代堂建議。"
+        description="老師事假／公假要調堂：可揀多日請假、指定由邊日開始搵調堂；確認後代堂會跟已調課表。CLP 唔係正規課，可以調堂。調唔到會畀代堂建議。"
       />
       <ScheduleGate>
         <SwapInner />
@@ -47,7 +48,26 @@ function SwapInner() {
   const [leaveDraft, setLeaveDraft] = useState(hkTodayIso());
   const [swapFromDate, setSwapFromDate] = useState(hkTodayIso());
   const [plan, setPlan] = useState<SwapPlan | null>(null);
+  const [swaps, setSwaps] = useState<ConfirmedSwap[]>([]);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/swap", { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("無法載入調堂紀錄");
+        return (await res.json()) as { swaps?: ConfirmedSwap[] };
+      })
+      .then((json) => {
+        if (!cancelled) setSwaps(json.swaps ?? []);
+      })
+      .catch(() => {
+        /* 靜態站無 API */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const teachers = useMemo(
     () => filterTeachers(data?.teachers ?? [], q),
@@ -92,6 +112,7 @@ function SwapInner() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "產生失敗");
       setPlan(json.plan as SwapPlan);
+      if (Array.isArray(json.swaps)) setSwaps(json.swaps);
       const s = (json.plan as SwapPlan).summary;
       toast.success(`已分析 ${s.total} 項：可調 ${s.swap} · 代堂建議 ${s.cover} · 不可調 ${s.blocked}`);
     } catch (e) {
@@ -103,6 +124,57 @@ function SwapInner() {
 
   const selectedTeacher = data.teachers.find((t) => t.id === teacherId);
 
+  const confirmSwap = async (result: SwapUnitResult) => {
+    if (!result.swap) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/swap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "confirm",
+          leaveTeacherId: teacherId,
+          leaveDate: result.unit.leaveDate,
+          leavePeriodId: result.unit.periodId,
+          leaveLessonIds: result.unit.lessons.map((l) => l.id),
+          partnerDate: result.swap.partnerDate,
+          partnerPeriodId: result.swap.partnerPeriodId,
+          partnerLessonIds: result.swap.partnerLessons.map((l) => l.id),
+          reason: result.swap.reason,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "確認失敗");
+      setSwaps(json.swaps ?? []);
+      toast.success("已確認調堂；之後代堂會跟呢份安排");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "確認失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const undoSwap = async (swapId: string) => {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/swap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "undo", swapId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "撤銷失敗");
+      setSwaps(json.swaps ?? []);
+      toast.success("已刪除調堂紀錄");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "撤銷失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmedKeys = new Set(swaps.map((s) => swapRecordKey(s)));
+
   return (
     <div className="space-y-6">
       <StaticModeBanner feature="調堂建議（需 API）" />
@@ -110,8 +182,8 @@ function SwapInner() {
         <CardHeader>
           <CardTitle>工作項目：老師事假／公假要調堂安排</CardTitle>
           <CardDescription>
-            1）揀請假日期（可多日）　2）揀由邊日開始搵調堂　3）調唔到會顯示代堂建議　4）高中選修並行時段唔可單獨調　5）IAL
-            同一時段一拼調
+            1）揀請假日期（可多日）　2）揀由邊日開始搵調堂　3）可調堂請確認入帳　4）CLP
+            唔擋調堂　5）高中選修並行時段唔可單獨調　6）IAL 同一時段一拼調
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -225,6 +297,42 @@ function SwapInner() {
         </CardContent>
       </Card>
 
+      <ManualSwapForm
+        teacherId={teacherId}
+        onTeacherNeeded={() => toast.error("請先選擇請假老師")}
+        busy={busy}
+        onSaved={(next) => setSwaps(next)}
+      />
+
+      {swaps.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>已確認調堂紀錄</CardTitle>
+            <CardDescription>可人手刪除（−）。代堂編配會跟呢啲紀錄，而唔係原先課表。</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {swaps.map((s) => (
+              <div
+                key={s.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
+              >
+                <span>
+                  {s.leaveTeacherName} {s.leaveDate} {periodLabel(s.leavePeriodId)}
+                  {s.leaveSubjects.length ? ` ${s.leaveSubjects.join("、")}` : ""}
+                  {" → "}
+                  {s.partnerDate} {periodLabel(s.partnerPeriodId)}
+                  {s.partnerTeacherNames.length ? `（${s.partnerTeacherNames.join("、")}）` : "（空堂／CLP）"}
+                </span>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => void undoSwap(s.id)}>
+                  <Trash2 />
+                  刪除
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
       {plan ? (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2 text-sm">
@@ -244,7 +352,21 @@ function SwapInner() {
               </CardContent>
             </Card>
           ) : (
-            plan.results.map((r) => <ResultCard key={r.unit.id} result={r} />)
+            plan.results.map((r) => (
+              <ResultCard
+                key={r.unit.id}
+                result={r}
+                confirmed={confirmedKeys.has(
+                  swapRecordKey({
+                    leaveTeacherId: teacherId,
+                    leaveDate: r.unit.leaveDate,
+                    leavePeriodId: r.unit.periodId,
+                  }),
+                )}
+                busy={busy}
+                onConfirm={() => void confirmSwap(r)}
+              />
+            ))
           )}
         </div>
       ) : null}
@@ -258,7 +380,17 @@ function statusBadge(status: SwapUnitResult["status"]) {
   return <Badge variant="secondary">不可調堂</Badge>;
 }
 
-function ResultCard({ result }: { result: SwapUnitResult }) {
+function ResultCard({
+  result,
+  confirmed,
+  busy,
+  onConfirm,
+}: {
+  result: SwapUnitResult;
+  confirmed?: boolean;
+  busy?: boolean;
+  onConfirm?: () => void;
+}) {
   const { data } = useSchedule();
   const { unit, status, swap, coverSuggestions, blockers } = result;
   if (!data) return null;
@@ -313,10 +445,22 @@ function ResultCard({ result }: { result: SwapUnitResult }) {
           <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 dark:bg-emerald-950/20">
             <p className="font-medium text-emerald-900 dark:text-emerald-100">{swap.reason}</p>
             <p className="mt-1 text-muted-foreground">
-              對調至 {dayLabel(swap.partnerDay)} {periodLabel(swap.partnerPeriodId)}（
-              {formatTimeRange(swap.partnerDay, swap.partnerPeriodId)}）· 對手：
-              {swap.partnerTeacherNames.join("、")} · {swap.partnerSubjects.join("、")}
+              對調至 {swap.partnerDate} {dayLabel(swap.partnerDay)} {periodLabel(swap.partnerPeriodId)}
+              （{formatTimeRange(swap.partnerDay, swap.partnerPeriodId)}）· 對手：
+              {swap.partnerTeacherNames.join("、") || "空堂／CLP"} · {swap.partnerSubjects.join("、")}
             </p>
+            {onConfirm ? (
+              <div className="mt-2">
+                {confirmed ? (
+                  <Badge className="bg-emerald-700 hover:bg-emerald-700">已確認入帳</Badge>
+                ) : (
+                  <Button size="sm" disabled={busy} onClick={onConfirm}>
+                    <Check />
+                    確認調堂
+                  </Button>
+                )}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -342,10 +486,159 @@ function ResultCard({ result }: { result: SwapUnitResult }) {
               ))}
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              正式入帳結餘請到「代堂」頁勾選請假同事產生方案。
+              正式入帳結餘請到「代堂」頁勾選請假同事產生方案。已確認調堂會改嗰日邊個得閒。
             </p>
           </div>
         ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ManualSwapForm({
+  teacherId,
+  onTeacherNeeded,
+  busy,
+  onSaved,
+}: {
+  teacherId: string;
+  onTeacherNeeded: () => void;
+  busy: boolean;
+  onSaved: (swaps: ConfirmedSwap[]) => void;
+}) {
+  const { data } = useSchedule();
+  const [leaveDate, setLeaveDate] = useState(hkTodayIso());
+  const [leavePeriodId, setLeavePeriodId] = useState("p3");
+  const [partnerDate, setPartnerDate] = useState(hkTodayIso());
+  const [partnerPeriodId, setPartnerPeriodId] = useState("p3");
+  const [partnerQ, setPartnerQ] = useState("");
+  const [partnerTeacherId, setPartnerTeacherId] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const partners = useMemo(
+    () => filterTeachers(data?.teachers ?? [], partnerQ),
+    [data, partnerQ],
+  );
+
+  if (!data) return null;
+
+  const add = async () => {
+    if (!teacherId) {
+      onTeacherNeeded();
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/swap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "add",
+          leaveTeacherId: teacherId,
+          leaveDate,
+          leavePeriodId,
+          partnerDate,
+          partnerPeriodId,
+          partnerTeacherId: partnerTeacherId || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "加入失敗");
+      onSaved(json.swaps ?? []);
+      toast.success("已人手加入調堂紀錄");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "加入失敗");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>人手加入調堂紀錄（＋）</CardTitle>
+        <CardDescription>
+          例如將課堂調去原本空堂／CLP。對手老師可留空（只搬去該節）。刪除用上面紀錄嘅「刪除」。
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="grid gap-1 text-sm">
+            <span className="text-muted-foreground">原課堂日期</span>
+            <Input type="date" value={leaveDate} onChange={(e) => setLeaveDate(e.target.value)} />
+          </label>
+          <label className="grid gap-1 text-sm">
+            <span className="text-muted-foreground">原節次</span>
+            <Select value={leavePeriodId} onValueChange={(v) => setLeavePeriodId(typeof v === "string" ? v : "p3")}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {COVER_PERIOD_IDS.map((id) => (
+                  <SelectItem key={id} value={id}>
+                    {periodLabel(id)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
+          <label className="grid gap-1 text-sm">
+            <span className="text-muted-foreground">調往日期</span>
+            <Input type="date" value={partnerDate} onChange={(e) => setPartnerDate(e.target.value)} />
+          </label>
+          <label className="grid gap-1 text-sm">
+            <span className="text-muted-foreground">調往節次</span>
+            <Select
+              value={partnerPeriodId}
+              onValueChange={(v) => setPartnerPeriodId(typeof v === "string" ? v : "p3")}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {COVER_PERIOD_IDS.map((id) => (
+                  <SelectItem key={id} value={id}>
+                    {periodLabel(id)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="grid gap-1 text-sm">
+            <span className="text-muted-foreground">對手老師（可留空＝調去空堂／CLP）</span>
+            <Input
+              placeholder="搜尋姓名／簡稱"
+              value={partnerQ}
+              onChange={(e) => setPartnerQ(e.target.value)}
+            />
+            <Select
+              value={partnerTeacherId || "none"}
+              onValueChange={(v) =>
+                setPartnerTeacherId(typeof v === "string" && v !== "none" ? v : "")
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="可留空" />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                <SelectItem value="none">（無對手／空堂／CLP）</SelectItem>
+                {partners.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name}（{t.code}）
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
+        </div>
+        <div>
+          <Button type="button" variant="outline" disabled={busy || saving} onClick={() => void add()}>
+            <Plus />
+            加入紀錄
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

@@ -10,10 +10,13 @@ import {
 } from "@/lib/cover";
 import { readCoverStore, writeCoverStore } from "@/lib/cover-store";
 import { readSchedule } from "@/lib/store";
+import { applyConfirmedSwaps } from "@/lib/swap-records";
+import { readSwapStore } from "@/lib/swap-store";
 
 export async function GET() {
   const store = readCoverStore();
-  return NextResponse.json(store);
+  const swaps = readSwapStore().swaps;
+  return NextResponse.json({ ...store, swaps });
 }
 
 type Body = {
@@ -23,7 +26,13 @@ type Body = {
   plan?: CoverPlan;
   planId?: string;
   assignments?: CoverAssignment[];
+  teacherId?: string;
+  delta?: number;
 };
+
+function scheduleForDate(date: string) {
+  return applyConfirmedSwaps(readSchedule(), date, readSwapStore().swaps);
+}
 
 export async function POST(req: Request) {
   let body: Body;
@@ -34,7 +43,6 @@ export async function POST(req: Request) {
   }
 
   const action = body.action;
-  const data = readSchedule();
   const store = readCoverStore();
 
   if (action === "preview") {
@@ -47,8 +55,31 @@ export async function POST(req: Request) {
     if (absentees.length === 0) {
       return NextResponse.json({ error: "請先勾選請假同事" }, { status: 400 });
     }
+    const data = scheduleForDate(date);
     const plan = generateCoverPlan(data, day, date, absentees, store.balances, store.plans);
-    return NextResponse.json({ plan, balances: store.balances });
+    return NextResponse.json({ plan, balances: store.balances, swaps: readSwapStore().swaps });
+  }
+
+  if (action === "adjustBalance") {
+    const teacherId = body.teacherId?.trim();
+    const delta = body.delta;
+    if (!teacherId) return NextResponse.json({ error: "請選擇老師" }, { status: 400 });
+    if (delta !== 1 && delta !== -1) {
+      return NextResponse.json({ error: "結餘只可以 ±1" }, { status: 400 });
+    }
+    const data = readSchedule();
+    if (!data.teachers.some((t) => t.id === teacherId)) {
+      return NextResponse.json({ error: "搵唔到呢位老師" }, { status: 404 });
+    }
+    const balances = { ...store.balances, [teacherId]: (store.balances[teacherId] ?? 0) + delta };
+    const next = { ...store, balances };
+    writeCoverStore(next);
+    return NextResponse.json({
+      ok: true,
+      balances: next.balances,
+      plans: next.plans,
+      swaps: readSwapStore().swaps,
+    });
   }
 
   if (action === "confirm") {
@@ -56,6 +87,7 @@ export async function POST(req: Request) {
     if (!incoming) {
       return NextResponse.json({ error: "未有代堂方案" }, { status: 400 });
     }
+    const data = scheduleForDate(incoming.date);
     const error = validateCoverPlan(data, incoming, store.balances);
     if (error) return NextResponse.json({ error }, { status: 400 });
 
@@ -72,7 +104,13 @@ export async function POST(req: Request) {
     };
     const next = { balances, plans: [saved, ...remaining].slice(0, 80) };
     writeCoverStore(next);
-    return NextResponse.json({ ok: true, saved, balances: next.balances, plans: next.plans });
+    return NextResponse.json({
+      ok: true,
+      saved,
+      balances: next.balances,
+      plans: next.plans,
+      swaps: readSwapStore().swaps,
+    });
   }
 
   if (action === "undo") {
@@ -86,7 +124,12 @@ export async function POST(req: Request) {
       plans: store.plans.filter((p) => p.id !== planId),
     };
     writeCoverStore(next);
-    return NextResponse.json({ ok: true, balances: next.balances, plans: next.plans });
+    return NextResponse.json({
+      ok: true,
+      balances: next.balances,
+      plans: next.plans,
+      swaps: readSwapStore().swaps,
+    });
   }
 
   return NextResponse.json({ error: "未知操作" }, { status: 400 });

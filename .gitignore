@@ -47,8 +47,9 @@ next-env.d.ts
 # 本機安裝包（由 agent 產生，唔入庫）
 /public/mkpkc-timetable-local.zip
 
-# runtime cover balances (local)
+# runtime cover balances / confirmed swaps (local)
 data/cover.json
+data/swaps.json
 
 
 .next-profiles/

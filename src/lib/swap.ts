@@ -4,7 +4,9 @@ import {
   periodLabel as periodLabelFromConstants,
 } from "./constants";
 import { weekdayFromIsoDate } from "./cover";
+import { isTeachingLesson, lessonOccupiesTeacher } from "./lesson-kind";
 import { classTokenMatches, substituteCandidates } from "./queries";
+import { swapSearchDates } from "./swap-records";
 import type { DayId, Lesson, ScheduleData } from "./types";
 
 export { isCoreSubject };
@@ -27,8 +29,10 @@ export type SwapUnit = {
 export type SwapMatch = {
   partnerLessons: Lesson[];
   partnerDay: DayId;
+  partnerDate: string;
   partnerPeriodId: string;
   partnerSubjects: string[];
+  partnerTeacherIds: string[];
   partnerTeacherNames: string[];
   reason: string;
 };
@@ -65,7 +69,7 @@ export type SwapPlan = {
 };
 
 function isTeaching(lesson: Lesson) {
-  return (lesson.kind ?? "lesson") === "lesson";
+  return isTeachingLesson(lesson);
 }
 
 function coverPeriods(day: DayId): string[] {
@@ -238,13 +242,6 @@ export function buildLeaveUnits(
   );
 }
 
-function weekdaySearchOrder(startDay: DayId): DayId[] {
-  const order: DayId[] = ["mon", "tue", "wed", "thu", "fri"];
-  const idx = order.indexOf(startDay);
-  if (idx < 0) return order;
-  return [...order.slice(idx), ...order.slice(0, idx)];
-}
-
 function classesOverlap(a: string[], b: string[]) {
   for (const x of a) {
     for (const y of b) {
@@ -267,7 +264,8 @@ function teacherFreeIgnoring(
       l.day === day &&
       l.periodId === periodId &&
       l.teacherIds.includes(teacherId) &&
-      !ignoreLessonIds.has(l.id),
+      !ignoreLessonIds.has(l.id) &&
+      lessonOccupiesTeacher(l),
   );
 }
 
@@ -285,18 +283,23 @@ function findNormalSwap(
   data: ScheduleData,
   unit: SwapUnit,
   leaveTeacherId: string,
-  leaveDaySet: Set<DayId>,
-  searchDays: DayId[],
+  searchDates: string[],
 ): SwapMatch | null {
   const lesson = unit.lessons[0];
   if (!lesson) return null;
   const ignoreMine = new Set(unit.lessons.map((l) => l.id));
 
-  for (const day of searchDays) {
-    if (leaveDaySet.has(day)) continue;
+  for (const partnerDate of searchDates) {
+    const day = weekdayFromIsoDate(partnerDate);
+    if (!day) continue;
+    const sameWeekdayOtherDate = day === unit.day && partnerDate !== unit.leaveDate;
+    const ignoreLeaveOnPartnerDay = sameWeekdayOtherDate ? new Set<string>() : ignoreMine;
+
     for (const periodId of coverPeriods(day)) {
-      if (day === unit.day && periodId === unit.periodId) continue;
-      if (!teacherFreeIgnoring(data, leaveTeacherId, day, periodId, ignoreMine)) continue;
+      if (partnerDate === unit.leaveDate && periodId === unit.periodId) continue;
+      if (!teacherFreeIgnoring(data, leaveTeacherId, day, periodId, ignoreLeaveOnPartnerDay)) {
+        continue;
+      }
 
       const partners = data.lessons.filter(
         (l) =>
@@ -320,8 +323,10 @@ function findNormalSwap(
       return {
         partnerLessons: [partner],
         partnerDay: day,
+        partnerDate,
         partnerPeriodId: periodId,
         partnerSubjects: [partner.subject],
+        partnerTeacherIds: [...partner.teacherIds],
         partnerTeacherNames: lessonTeacherNames(data, [partner]),
         reason: `同班對調：${periodLabelFromConstants(unit.periodId)}（${unit.subjects.join("、")}）⇄ ${periodLabelFromConstants(periodId)}（${partner.subject}）`,
       };
@@ -334,8 +339,7 @@ function findIalBundleSwap(
   data: ScheduleData,
   unit: SwapUnit,
   leaveTeacherId: string,
-  leaveDaySet: Set<DayId>,
-  searchDays: DayId[],
+  searchDates: string[],
 ): SwapMatch | null {
   const seed = unit.lessons[0];
   if (!seed) return null;
@@ -346,21 +350,27 @@ function findIalBundleSwap(
   const ignoreMine = new Set(unit.lessons.map((l) => l.id));
   const myTeachers = [...new Set(unit.lessons.flatMap((l) => l.teacherIds))];
 
-  for (const day of searchDays) {
-    if (leaveDaySet.has(day) && day !== unit.day) continue;
+  for (const partnerDate of searchDates) {
+    const day = weekdayFromIsoDate(partnerDate);
+    if (!day) continue;
+    const sameWeekdayOtherDate = day === unit.day && partnerDate !== unit.leaveDate;
+    const ignoreLeaveOnPartnerDay = sameWeekdayOtherDate ? new Set<string>() : ignoreMine;
+
     for (const periodId of coverPeriods(day)) {
-      if (day === unit.day && periodId === unit.periodId) continue;
+      if (partnerDate === unit.leaveDate && periodId === unit.periodId) continue;
 
       const partnerBundle = parallelLessonsForClass(data, day, periodId, ialClass).filter(
         lessonHasIal,
       );
       if (partnerBundle.length < 1) continue;
-      if (partnerBundle.every((l) => ignoreMine.has(l.id))) continue;
+      if (partnerBundle.every((l) => ignoreLeaveOnPartnerDay.has(l.id))) continue;
 
       const partnerTeachers = [...new Set(partnerBundle.flatMap((l) => l.teacherIds))];
       const ignorePartner = new Set(partnerBundle.map((l) => l.id));
 
-      if (!allTeachersFreeIgnoring(data, myTeachers, day, periodId, ignoreMine)) continue;
+      if (!allTeachersFreeIgnoring(data, myTeachers, day, periodId, ignoreLeaveOnPartnerDay)) {
+        continue;
+      }
       if (
         !allTeachersFreeIgnoring(data, partnerTeachers, unit.day, unit.periodId, ignorePartner)
       ) {
@@ -373,8 +383,10 @@ function findIalBundleSwap(
       return {
         partnerLessons: partnerBundle,
         partnerDay: day,
+        partnerDate,
         partnerPeriodId: periodId,
         partnerSubjects: [...new Set(partnerBundle.map((l) => l.subject))],
+        partnerTeacherIds: partnerTeachers,
         partnerTeacherNames: lessonTeacherNames(data, partnerBundle),
         reason: `IAL 整組對調：${unit.subjects.join("、")} ⇄ ${[
           ...new Set(partnerBundle.map((l) => l.subject)),
@@ -437,11 +449,7 @@ export function planTeacherLeaveSwaps(
   const teacher = data.teachers.find((t) => t.id === teacherId);
   const teacherName = teacher?.name ?? teacherId;
   const units = buildLeaveUnits(data, teacherId, leaveDates);
-  const leaveDaySet = new Set(
-    leaveDates.map(weekdayFromIsoDate).filter((d): d is DayId => Boolean(d)),
-  );
-  const startDay = weekdayFromIsoDate(swapFromDate) ?? "mon";
-  const searchDays = weekdaySearchOrder(startDay);
+  const searchDates = swapSearchDates(swapFromDate, leaveDates);
 
   const results: SwapUnitResult[] = units.map((unit) => {
     if (unit.kind === "elective_blocked") {
@@ -457,8 +465,8 @@ export function planTeacherLeaveSwaps(
 
     const swap =
       unit.kind === "ial_bundle"
-        ? findIalBundleSwap(data, unit, teacherId, leaveDaySet, searchDays)
-        : findNormalSwap(data, unit, teacherId, leaveDaySet, searchDays);
+        ? findIalBundleSwap(data, unit, teacherId, searchDates)
+        : findNormalSwap(data, unit, teacherId, searchDates);
 
     if (swap) {
       return {
