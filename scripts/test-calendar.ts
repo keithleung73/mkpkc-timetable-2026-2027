@@ -59,6 +59,10 @@ const 乙 = teacher("乙", "乙老師");
   assert.equal(isSwapAllowedDate("2026-09-03"), true);
   assert.equal(swapBlockedReason("2026-09-03"), null);
   assert.equal(schoolClosedReason("2026-09-03"), null);
+  assert.equal(schoolClosedReason("2026-09-04"), null, "星期五正常上課");
+  assert.equal(coverDateError("2026-09-04"), null);
+  assert.match(swapBlockedReason("not-a-date") ?? "", /有效日期/);
+  assert.match(coverDateError("2026-09-99") ?? "", /有效日期/);
 }
 
 {

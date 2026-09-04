@@ -145,6 +145,13 @@ function joinZh(labels: string[]): string {
   return `${labels.slice(0, -1).join("、")}及${labels[labels.length - 1]}`;
 }
 
+function isValidIsoDate(iso: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+  const d = new Date(`${iso}T12:00:00+08:00`);
+  if (Number.isNaN(d.getTime())) return false;
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Hong_Kong" }) === iso;
+}
+
 export function calendarEventsOn(iso: string): CalendarEvent[] {
   return SCHOOL_CALENDAR.filter((event) => event.start <= iso && iso <= event.end);
 }
@@ -165,6 +172,7 @@ export function isSwapAllowedDate(iso: string): boolean {
 }
 
 export function swapBlockedReason(iso: string): string | null {
+  if (!isValidIsoDate(iso)) return "請揀有效日期，不能調堂。";
   if (!weekdayFromIsoDate(iso)) return "唔係上課日（星期六／日），不能調堂。";
   const labels = calendarLabelsOn(iso);
   if (labels.length === 0) return null;
@@ -173,6 +181,7 @@ export function swapBlockedReason(iso: string): string | null {
 
 /** 假期／無堂日說明；統測、考試、深度學習周仍可能需要代堂，故回傳 null */
 export function schoolClosedReason(iso: string): string | null {
+  if (!isValidIsoDate(iso)) return "請揀有效日期";
   if (!weekdayFromIsoDate(iso)) return "唔係上課日（星期六／日）";
   const closed = calendarEventsOn(iso).filter((event) => event.closesSchool);
   if (closed.length === 0) return null;
