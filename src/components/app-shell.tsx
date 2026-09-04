@@ -10,6 +10,7 @@ import {
   LayoutGrid,
   Repeat2,
   Search,
+  Share2,
   Users,
   UserSearch,
 } from "lucide-react";
@@ -26,6 +27,7 @@ const NAV = [
   { href: "/classes", label: "班別課表", icon: DoorOpen },
   { href: "/swap", label: "調堂", icon: ArrowLeftRight },
   { href: "/cover", label: "代堂", icon: Repeat2 },
+  { href: "/share", label: "給同事", icon: Share2 },
   { href: "/import", label: "匯入 Excel", icon: FileSpreadsheet },
 ];
 

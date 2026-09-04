@@ -44,6 +44,7 @@ for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do (
   for /f "tokens=*" %%b in ("%%a") do (
     echo   http://%%b:43217
     echo   代堂： http://%%b:43217/cover
+    echo   給同事： http://%%b:43217/share
     if not defined SHARE_URL set "SHARE_URL=http://%%b:43217"
   )
 )
