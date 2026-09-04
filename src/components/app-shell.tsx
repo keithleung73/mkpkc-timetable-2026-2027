@@ -25,8 +25,8 @@ const NAV = [
   { href: "/free", label: "空閒老師", icon: Users },
   { href: "/common-free", label: "共同空閒", icon: CalendarDays },
   { href: "/classes", label: "班別課表", icon: DoorOpen },
-  { href: "/swap", label: "調堂", icon: ArrowLeftRight, localOnly: true },
-  { href: "/cover", label: "代堂", icon: Repeat2, localOnly: true },
+  { href: "/swap", label: "調堂", icon: ArrowLeftRight },
+  { href: "/cover", label: "代堂", icon: Repeat2 },
   { href: "/share", label: "給同事", icon: Share2, localOnly: true },
   { href: "/import", label: "匯入 Excel", icon: FileSpreadsheet, localOnly: true },
 ];
@@ -86,7 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <p className="px-5 py-4 text-xs text-white/50">
-          {isStaticExport ? "網上唯讀版 · GitHub Pages" : "本機試用 · timetable.mkpkc.local"}
+          {isStaticExport ? "網上版 · GitHub Pages" : "本機試用 · timetable.mkpkc.local"}
         </p>
       </aside>
 

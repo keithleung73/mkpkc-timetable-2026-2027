@@ -24,6 +24,7 @@ import { classNames, roomName } from "@/lib/queries";
 import { filterTeachers } from "@/lib/search";
 import type { SwapPlan, SwapUnitResult } from "@/lib/swap";
 import { swapRecordKey, type ConfirmedSwap } from "@/lib/swap-records";
+import { swapRequest } from "@/lib/web-ops";
 import { cn } from "@/lib/utils";
 
 export default function SwapPage() {
@@ -53,16 +54,12 @@ function SwapInner() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/swap", { cache: "no-store" })
-      .then(async (res) => {
-        if (!res.ok) throw new Error("無法載入調堂紀錄");
-        return (await res.json()) as { swaps?: ConfirmedSwap[] };
-      })
+    void swapRequest(null, undefined, "GET")
       .then((json) => {
-        if (!cancelled) setSwaps(json.swaps ?? []);
+        if (!cancelled) setSwaps((json as { swaps?: ConfirmedSwap[] }).swaps ?? []);
       })
       .catch(() => {
-        /* 靜態站無 API */
+        /* 未有紀錄 */
       });
     return () => {
       cancelled = true;
@@ -104,14 +101,11 @@ function SwapInner() {
     }
     setBusy(true);
     try {
-      const res = await fetch("/api/swap", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teacherId, leaveDates, swapFromDate }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "產生失敗");
-      setPlan(json.plan as SwapPlan);
+      const json = (await swapRequest(data, { teacherId, leaveDates, swapFromDate })) as {
+        plan: SwapPlan;
+        swaps?: ConfirmedSwap[];
+      };
+      setPlan(json.plan);
       if (Array.isArray(json.swaps)) setSwaps(json.swaps);
       const s = (json.plan as SwapPlan).summary;
       toast.success(`已分析 ${s.total} 項：可調 ${s.swap} · 代堂建議 ${s.cover} · 不可調 ${s.blocked}`);
@@ -128,23 +122,17 @@ function SwapInner() {
     if (!result.swap) return;
     setBusy(true);
     try {
-      const res = await fetch("/api/swap", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "confirm",
-          leaveTeacherId: teacherId,
-          leaveDate: result.unit.leaveDate,
-          leavePeriodId: result.unit.periodId,
-          leaveLessonIds: result.unit.lessons.map((l) => l.id),
-          partnerDate: result.swap.partnerDate,
-          partnerPeriodId: result.swap.partnerPeriodId,
-          partnerLessonIds: result.swap.partnerLessons.map((l) => l.id),
-          reason: result.swap.reason,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "確認失敗");
+      const json = (await swapRequest(data, {
+        action: "confirm",
+        leaveTeacherId: teacherId,
+        leaveDate: result.unit.leaveDate,
+        leavePeriodId: result.unit.periodId,
+        leaveLessonIds: result.unit.lessons.map((l) => l.id),
+        partnerDate: result.swap.partnerDate,
+        partnerPeriodId: result.swap.partnerPeriodId,
+        partnerLessonIds: result.swap.partnerLessons.map((l) => l.id),
+        reason: result.swap.reason,
+      })) as { swaps?: ConfirmedSwap[] };
       setSwaps(json.swaps ?? []);
       toast.success("已確認調堂；之後代堂會跟呢份安排");
     } catch (e) {
@@ -157,13 +145,7 @@ function SwapInner() {
   const undoSwap = async (swapId: string) => {
     setBusy(true);
     try {
-      const res = await fetch("/api/swap", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "undo", swapId }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "撤銷失敗");
+      const json = (await swapRequest(data, { action: "undo", swapId })) as { swaps?: ConfirmedSwap[] };
       setSwaps(json.swaps ?? []);
       toast.success("已刪除調堂紀錄");
     } catch (e) {
@@ -177,7 +159,7 @@ function SwapInner() {
 
   return (
     <div className="space-y-6">
-      <StaticModeBanner feature="調堂建議（需 API）" />
+      <StaticModeBanner feature="調堂安排" mode="browser" />
       <Card>
         <CardHeader>
           <CardTitle>工作項目：老師事假／公假要調堂安排</CardTitle>
@@ -529,21 +511,15 @@ function ManualSwapForm({
     }
     setSaving(true);
     try {
-      const res = await fetch("/api/swap", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "add",
-          leaveTeacherId: teacherId,
-          leaveDate,
-          leavePeriodId,
-          partnerDate,
-          partnerPeriodId,
-          partnerTeacherId: partnerTeacherId || undefined,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "加入失敗");
+      const json = (await swapRequest(data, {
+        action: "add",
+        leaveTeacherId: teacherId,
+        leaveDate,
+        leavePeriodId,
+        partnerDate,
+        partnerPeriodId,
+        partnerTeacherId: partnerTeacherId || undefined,
+      })) as { swaps?: ConfirmedSwap[] };
       onSaved(json.swaps ?? []);
       toast.success("已人手加入調堂紀錄");
     } catch (e) {

@@ -25,21 +25,13 @@
 
 ## 網上查詢（GitHub Pages）
 
-唯讀課表站（查老師／班別／空閒）。調堂、代堂、匯入仍要用下面「校內網站」。
-
-公開網址（啟用後）：
+公開網址：
 
 **https://keithleung73.github.io/mkpkc-timetable-2026-2027/**
 
-倉庫而家係私人的。GitHub Free 嘅私人庫**不能**開 Pages。請用 GitHub 帳戶（`keithleung73`）做一次：
+可查老師／班別／空閒，亦可做**調堂**同**代堂**。網上版紀錄存在該部瀏覽器，唔會自動同步去其他同事電腦。匯入 Excel 仍要用下面「校內網站」。
 
-1. 打開 [Settings → Pages](https://github.com/keithleung73/mkpkc-timetable-2026-2027/settings/pages)
-2. **Source** 揀 **Deploy from a branch**
-3. Branch 揀 **`gh-pages`**、資料夾 **`/` (root)** → Save  
-   （若未見 `gh-pages`，等 Actions 跑完，或將本 PR 合併入 `main`）
-4. 若提示私人庫不能用 Pages：先 [改為 Public](https://github.com/keithleung73/mkpkc-timetable-2026-2027/settings)（Settings → Danger Zone → Change visibility），**或**升級 GitHub Pro。公開後課表（老師姓名）任何人都可以睇。
-
-合併入 `main` 後，GitHub Actions 會自動更新 `gh-pages`。
+倉庫公開後，GitHub Pages 由 `gh-pages` 分支發佈。合併入 `main` 後 Actions 會自動更新。
 
 ## 給同事使用（校內網站）
 

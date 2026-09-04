@@ -42,6 +42,9 @@ import type { ScheduleData, Teacher } from "@/lib/types";
 import { coverPdfFilename } from "@/lib/cover-pdf";
 import { filterTeachers, teacherEnglishLabels } from "@/lib/search";
 import { applyConfirmedSwaps, swapsAffectingDate, type ConfirmedSwap } from "@/lib/swap-records";
+import { coverRequest } from "@/lib/web-ops";
+import { printCoverPlan } from "@/lib/cover-print";
+import { isStaticExport } from "@/lib/runtime";
 import { cn } from "@/lib/utils";
 
 type CoverStorePayload = {
@@ -86,16 +89,13 @@ function Inner() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/cover", { cache: "no-store" })
-      .then(async (res) => {
-        if (!res.ok) throw new Error("無法載入代堂結餘");
-        return (await res.json()) as CoverStorePayload;
-      })
+    void coverRequest(null, undefined, "GET")
       .then((json) => {
         if (cancelled) return;
-        setBalances(json.balances ?? {});
-        setHistory(json.plans ?? []);
-        setSwaps(json.swaps ?? []);
+        const payload = json as CoverStorePayload;
+        setBalances(payload.balances ?? {});
+        setHistory(payload.plans ?? []);
+        setSwaps(payload.swaps ?? []);
       })
       .catch((e) => {
         if (!cancelled) setLoadError(e instanceof Error ? e.message : "載入失敗");
@@ -159,13 +159,9 @@ function Inner() {
     if (!plan) return;
     setBusy(true);
     try {
-      const res = await fetch("/api/cover", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "confirm", plan }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "入帳失敗");
+      const json = (await coverRequest(data, { action: "confirm", plan })) as CoverStorePayload & {
+        swaps?: ConfirmedSwap[];
+      };
       setBalances(json.balances);
       setHistory(json.plans);
       if (Array.isArray(json.swaps)) setSwaps(json.swaps);
@@ -181,6 +177,11 @@ function Inner() {
   const exportPdf = async (target: CoverPlan) => {
     setBusy(true);
     try {
+      if (isStaticExport) {
+        printCoverPlan(target, data, reason);
+        toast.success("請用瀏覽器列印對話框另存 PDF");
+        return;
+      }
       const res = await fetch("/api/cover/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -210,13 +211,7 @@ function Inner() {
   const undo = async (planId: string) => {
     setBusy(true);
     try {
-      const res = await fetch("/api/cover", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "undo", planId }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "撤銷失敗");
+      const json = (await coverRequest(data, { action: "undo", planId })) as CoverStorePayload;
       setBalances(json.balances);
       setHistory(json.plans);
       if (Array.isArray(json.swaps)) setSwaps(json.swaps);
@@ -231,13 +226,7 @@ function Inner() {
   const adjustBalance = async (teacherId: string, delta: 1 | -1) => {
     setBusy(true);
     try {
-      const res = await fetch("/api/cover", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "adjustBalance", teacherId, delta }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "改結餘失敗");
+      const json = (await coverRequest(data, { action: "adjustBalance", teacherId, delta })) as CoverStorePayload;
       setBalances(json.balances);
       if (Array.isArray(json.swaps)) setSwaps(json.swaps);
       toast.success(`已人手${delta > 0 ? "+1" : "−1"}`);
@@ -257,7 +246,7 @@ function Inner() {
 
   return (
     <div className="space-y-6">
-      <StaticModeBanner feature="代堂編配／入帳" />
+      <StaticModeBanner feature="代堂編配／入帳" mode="browser" />
       {loadError ? (
         <p className="text-sm text-destructive">{loadError}</p>
       ) : null}

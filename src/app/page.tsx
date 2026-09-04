@@ -78,7 +78,7 @@ export default function HomePage() {
         title={`${SCHOOL_NAME} ${SCHOOL_YEAR} 課表`}
         description={
           isStaticExport
-            ? "學務發展部課表查詢。可查老師、班別同空閒時段。"
+            ? "學務發展部課表查詢。可查老師、班別、空閒，亦可做調堂同代堂。"
             : "學務發展部課表網站。同事喺校網用瀏覽器打開即可；按側欄「給同事」複製網址。"
         }
       />
@@ -173,10 +173,7 @@ function DashboardInner() {
       </Card>
 
       <div className="grid gap-4 md:grid-cols-2">
-        {(isStaticExport
-          ? LINKS.filter((item) => !["/share", "/swap", "/cover"].includes(item.href))
-          : LINKS
-        ).map((item) => (
+        {(isStaticExport ? LINKS.filter((item) => item.href !== "/share") : LINKS).map((item) => (
           <Link key={item.href} href={item.href}>
             <Card className="h-full transition hover:border-[color:var(--school-navy)] hover:shadow-sm">
               <CardHeader>
