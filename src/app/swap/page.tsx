@@ -5,7 +5,6 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { ArrowLeftRight, Check, Plus, Repeat2, Trash2, X } from "lucide-react";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
-import { StaticModeBanner } from "@/components/static-mode-banner";
 import { useSchedule } from "@/components/schedule-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,7 +31,7 @@ export default function SwapPage() {
     <PageBody>
       <PageHeader
         title="調堂安排"
-        description="老師事假／公假要調堂：可揀多日請假、指定由邊日開始搵調堂；確認後代堂會跟已調課表。CLP 唔係正規課，可以調堂。調唔到會畀代堂建議。"
+        description="老師事假／公假要調堂：可揀多日請假、指定由邊日開始搵調堂；IAL 選修會一拼調；調唔到會畀代堂建議。"
       />
       <ScheduleGate>
         <SwapInner />
@@ -159,13 +158,12 @@ function SwapInner() {
 
   return (
     <div className="space-y-6">
-      <StaticModeBanner feature="調堂安排" mode="browser" />
       <Card>
         <CardHeader>
           <CardTitle>工作項目：老師事假／公假要調堂安排</CardTitle>
           <CardDescription>
-            1）揀請假日期（可多日）　2）揀由邊日開始搵調堂　3）可調堂請確認入帳　4）CLP
-            唔擋調堂　5）高中選修並行時段唔可單獨調　6）IAL 同一時段一拼調
+            1）揀請假日期（可多日）　2）揀由邊日開始搵調堂　3）調唔到會畀代堂建議　4）高中選修並行時段唔可單獨調　5）IAL
+            同一時段一拼調
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">

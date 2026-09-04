@@ -60,13 +60,13 @@ const LINKS = [
   {
     href: "/swap",
     title: "調堂安排",
-    desc: "事假／公假多日調堂：確認後代堂跟已調課表；CLP 可調；選修並行不可單獨調。",
+    desc: "事假／公假多日調堂；IAL 一拼調，選修並行不可單獨調；調唔到會畀代堂建議。",
     icon: ArrowLeftRight,
   },
   {
     href: "/cover",
     title: "代堂編配",
-    desc: "勾選請假同事，按已確認調堂後課表同負數結餘編配；可人手 ±1 改結餘。",
+    desc: "勾選請假同事，按負數結餘優先組當日代堂方案；不可連續代堂，當日原有堂不可多於 6 節。",
     icon: Repeat2,
   },
 ];
@@ -78,7 +78,7 @@ export default function HomePage() {
         title={`${SCHOOL_NAME} ${SCHOOL_YEAR} 課表`}
         description={
           isStaticExport
-            ? "學務發展部課表查詢。可查老師、班別、空閒，亦可做調堂同代堂。"
+            ? "學務發展部課表查詢。可查老師／班別／空閒，亦可做調堂同代堂編配。"
             : "學務發展部課表網站。同事喺校網用瀏覽器打開即可；按側欄「給同事」複製網址。"
         }
       />

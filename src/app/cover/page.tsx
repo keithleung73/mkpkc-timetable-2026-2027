@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { FileDown, Minus, Plus, Repeat2 } from "lucide-react";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
-import { StaticModeBanner } from "@/components/static-mode-banner";
 import { useSchedule } from "@/components/schedule-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,7 +57,7 @@ export default function CoverPage() {
     <PageBody>
       <PageHeader
         title="代堂編配"
-        description="勾選當日請假同事，系統按已確認調堂後嘅課表編配代堂（唔再用原先空堂）。盡量避開指定同事，同一星期亦盡量唔連續代多過兩日。"
+        description="勾選當日請假同事，系統按負數結餘（病假／請假較多）優先編配代堂。盡量避開指定同事，同一星期亦盡量唔連續代多過兩日。"
       />
       <ScheduleGate>
         <Inner />
@@ -246,7 +245,6 @@ function Inner() {
 
   return (
     <div className="space-y-6">
-      <StaticModeBanner feature="代堂編配／入帳" mode="browser" />
       {loadError ? (
         <p className="text-sm text-destructive">{loadError}</p>
       ) : null}

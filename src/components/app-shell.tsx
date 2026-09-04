@@ -27,8 +27,8 @@ const NAV = [
   { href: "/classes", label: "班別課表", icon: DoorOpen },
   { href: "/swap", label: "調堂", icon: ArrowLeftRight },
   { href: "/cover", label: "代堂", icon: Repeat2 },
+  { href: "/import", label: "匯入 Excel", icon: FileSpreadsheet },
   { href: "/share", label: "給同事", icon: Share2, localOnly: true },
-  { href: "/import", label: "匯入 Excel", icon: FileSpreadsheet, localOnly: true },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
