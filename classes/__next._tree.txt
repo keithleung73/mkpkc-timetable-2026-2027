@@ -1,0 +1,4 @@
+:HL["/mkpkc-timetable-2026-2027/_next/static/chunks/14o-w0vc36m-z.css","style"]
+:HL["/mkpkc-timetable-2026-2027/_next/static/chunks/0v1or0cowlmq1.css","style"]
+:HL["/mkpkc-timetable-2026-2027/_next/static/media/fb4edce8a3cbfef3-s.p.3ep0ejxd-rul1.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
+0:{"tree":{"name":"","param":null,"prefetchHints":4176,"slots":{"children":{"name":"classes","param":null,"prefetchHints":4192,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":4256,"slots":null}}}}},"staleTime":300,"buildId":"FwBwn52Nm3gPf6jaTVOuH"}
