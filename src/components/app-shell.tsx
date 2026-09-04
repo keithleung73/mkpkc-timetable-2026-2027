@@ -10,6 +10,7 @@ import {
   LayoutGrid,
   Repeat2,
   Search,
+  Share2,
   Users,
   UserSearch,
 } from "lucide-react";
@@ -27,10 +28,12 @@ const NAV = [
   { href: "/swap", label: "調堂", icon: ArrowLeftRight },
   { href: "/cover", label: "代堂", icon: Repeat2 },
   { href: "/import", label: "匯入 Excel", icon: FileSpreadsheet },
+  { href: "/share", label: "給同事", icon: Share2, localOnly: true },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const nav = isStaticExport ? NAV.filter((item) => !item.localOnly) : NAV;
   return (
     <div className="flex min-h-full flex-col bg-background lg:flex-row">
       <header className="border-b bg-[color:var(--school-navy)] text-white lg:hidden">
@@ -39,7 +42,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <h1 className="text-base font-semibold">{SCHOOL_NAME}課表查詢</h1>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-2 pb-2">
-          {NAV.map((item) => {
+          {nav.map((item) => {
             const active = pathname === item.href;
             return (
               <Link
@@ -65,7 +68,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <p className="mt-1 text-sm text-white/70">學務發展部 · 課表查詢</p>
         </div>
         <nav className="flex flex-1 flex-col gap-0.5 p-3">
-          {NAV.map((item) => {
+          {nav.map((item) => {
             const active = pathname === item.href;
             return (
               <Link
@@ -83,7 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <p className="px-5 py-4 text-xs text-white/50">
-          {isStaticExport ? "網上唯讀版 · GitHub Pages" : "本機試用 · timetable.mkpkc.local"}
+          {isStaticExport ? "網上版 · GitHub Pages" : "本機試用 · timetable.mkpkc.local"}
         </p>
       </aside>
 

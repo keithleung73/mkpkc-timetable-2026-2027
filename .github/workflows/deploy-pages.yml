@@ -1,3 +1,7 @@
+# Publishes the read-only timetable to the `gh-pages` branch.
+# Official actions/deploy-pages needs Pages enabled first (owner-only) and
+# fails on private GitHub Free repos. Branch deploy works as soon as the
+# owner sets Settings → Pages → Deploy from a branch → gh-pages / (root).
 name: Deploy GitHub Pages
 
 on:
@@ -6,16 +10,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-publish:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -33,18 +35,10 @@ jobs:
       - name: Build static site
         run: npm run build:pages
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Publish gh-pages branch
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
-          path: out
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          folder: out
+          branch: gh-pages
+          clean: true
+          single-commit: true

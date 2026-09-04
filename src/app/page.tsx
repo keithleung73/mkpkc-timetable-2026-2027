@@ -7,9 +7,11 @@ import {
   DoorOpen,
   Repeat2,
   Search,
+  Share2,
   Users,
   UserSearch,
 } from "lucide-react";
+import { isStaticExport, GITHUB_PAGES_SITE } from "@/lib/runtime";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
@@ -19,6 +21,12 @@ import { currentDay, currentPeriodId, isTeachingPeriod } from "@/lib/clock";
 import { classNames, freeTeachers, roomName, stats, teacherNames } from "@/lib/queries";
 
 const LINKS = [
+  {
+    href: "/share",
+    title: "給同事使用",
+    desc: "複製校內網址，貼去 WhatsApp／電郵。同事唔使安裝，用手機或電腦瀏覽器打開。",
+    icon: Share2,
+  },
   {
     href: "/teachers",
     title: "搜尋老師時間表",
@@ -52,7 +60,7 @@ const LINKS = [
   {
     href: "/swap",
     title: "調堂安排",
-    desc: "事假／公假多日調堂：IAL 一拼調，選修並行不可單獨調；調唔到會畀代堂建議。",
+    desc: "事假／公假多日調堂；IAL 一拼調，選修並行不可單獨調；調唔到會畀代堂建議。",
     icon: ArrowLeftRight,
   },
   {
@@ -68,7 +76,11 @@ export default function HomePage() {
     <PageBody>
       <PageHeader
         title={`${SCHOOL_NAME} ${SCHOOL_YEAR} 課表`}
-        description="學務發展部本機查詢系統。種子資料按《成裘集》老師簡稱、班主任同作息編排；正式課表可於「匯入 Excel」上載班級／老師／特別室總表。"
+        description={
+          isStaticExport
+            ? "學務發展部課表查詢。可查老師／班別／空閒，亦可做調堂同代堂編配。"
+            : "學務發展部課表網站。同事喺校網用瀏覽器打開即可；按側欄「給同事」複製網址。"
+        }
       />
       <ScheduleGate>
         <DashboardInner />
@@ -99,6 +111,20 @@ function DashboardInner() {
         <Stat label="課堂紀錄" value={s.lessons} />
         <Stat label="特別室" value={s.specialRooms} />
       </div>
+
+      {isStaticExport ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">網上地址</CardTitle>
+            <CardDescription>同事用瀏覽器打開即可查課表（唯讀）。</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <a className="font-mono text-sm underline-offset-2 hover:underline" href={GITHUB_PAGES_SITE}>
+              {GITHUB_PAGES_SITE}
+            </a>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -147,7 +173,7 @@ function DashboardInner() {
       </Card>
 
       <div className="grid gap-4 md:grid-cols-2">
-        {LINKS.map((item) => (
+        {(isStaticExport ? LINKS.filter((item) => item.href !== "/share") : LINKS).map((item) => (
           <Link key={item.href} href={item.href}>
             <Card className="h-full transition hover:border-[color:var(--school-navy)] hover:shadow-sm">
               <CardHeader>
