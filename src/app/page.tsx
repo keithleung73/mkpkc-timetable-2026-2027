@@ -11,7 +11,7 @@ import {
   Users,
   UserSearch,
 } from "lucide-react";
-import { isStaticExport } from "@/lib/runtime";
+import { isStaticExport, GITHUB_PAGES_SITE } from "@/lib/runtime";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
@@ -112,6 +112,20 @@ function DashboardInner() {
         <Stat label="特別室" value={s.specialRooms} />
       </div>
 
+      {isStaticExport ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">網上地址</CardTitle>
+            <CardDescription>同事用瀏覽器打開即可查課表（唯讀）。</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <a className="font-mono text-sm underline-offset-2 hover:underline" href={GITHUB_PAGES_SITE}>
+              {GITHUB_PAGES_SITE}
+            </a>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle>而家呢一節</CardTitle>
@@ -159,7 +173,10 @@ function DashboardInner() {
       </Card>
 
       <div className="grid gap-4 md:grid-cols-2">
-        {LINKS.map((item) => (
+        {(isStaticExport
+          ? LINKS.filter((item) => !["/share", "/swap", "/cover"].includes(item.href))
+          : LINKS
+        ).map((item) => (
           <Link key={item.href} href={item.href}>
             <Card className="h-full transition hover:border-[color:var(--school-navy)] hover:shadow-sm">
               <CardHeader>

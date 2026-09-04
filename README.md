@@ -23,11 +23,27 @@
 - 會議同課後時段不列入代堂。確認入帳後會累計結餘；同一日再確認會覆蓋當日方案。
 - **匯出 PDF**：將當日方案輸出為學務「代堂調堂處理」橫向表格（日期、請假老師、代堂人、受影響科目）。
 
+## 網上查詢（GitHub Pages）
+
+唯讀課表站（查老師／班別／空閒）。調堂、代堂、匯入仍要用下面「校內網站」。
+
+公開網址（啟用後）：
+
+**https://keithleung73.github.io/mkpkc-timetable-2026-2027/**
+
+倉庫而家係私人的。GitHub Free 嘅私人庫**不能**開 Pages。請用 GitHub 帳戶（`keithleung73`）做一次：
+
+1. 打開 [Settings → Pages](https://github.com/keithleung73/mkpkc-timetable-2026-2027/settings/pages)
+2. **Source** 揀 **Deploy from a branch**
+3. Branch 揀 **`gh-pages`**、資料夾 **`/` (root)** → Save  
+   （若未見 `gh-pages`，等 Actions 跑完，或將本 PR 合併入 `main`）
+4. 若提示私人庫不能用 Pages：先 [改為 Public](https://github.com/keithleung73/mkpkc-timetable-2026-2027/settings)（Settings → Danger Zone → Change visibility），**或**升級 GitHub Pro。公開後課表（老師姓名）任何人都可以睇。
+
+合併入 `main` 後，GitHub Actions 會自動更新 `gh-pages`。
+
 ## 給同事使用（校內網站）
 
-倉庫係私人的（課表有老師姓名），**唔會公開上網**。GitHub Pages 因此未開。
-
-學務部一部電腦做主機，同一校網同事用瀏覽器打開即可：
+學務部一部電腦做主機，同一校網同事用瀏覽器打開即可（可做調堂／代堂）：
 
 1. Windows 雙擊 `共用啟動.bat`（Mac／Linux 用 `共用啟動.command`／`共用啟動.sh`）
 2. 保持黑窗開住

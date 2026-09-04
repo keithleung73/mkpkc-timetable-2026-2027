@@ -25,14 +25,15 @@ const NAV = [
   { href: "/free", label: "空閒老師", icon: Users },
   { href: "/common-free", label: "共同空閒", icon: CalendarDays },
   { href: "/classes", label: "班別課表", icon: DoorOpen },
-  { href: "/swap", label: "調堂", icon: ArrowLeftRight },
-  { href: "/cover", label: "代堂", icon: Repeat2 },
-  { href: "/share", label: "給同事", icon: Share2 },
-  { href: "/import", label: "匯入 Excel", icon: FileSpreadsheet },
+  { href: "/swap", label: "調堂", icon: ArrowLeftRight, localOnly: true },
+  { href: "/cover", label: "代堂", icon: Repeat2, localOnly: true },
+  { href: "/share", label: "給同事", icon: Share2, localOnly: true },
+  { href: "/import", label: "匯入 Excel", icon: FileSpreadsheet, localOnly: true },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const nav = isStaticExport ? NAV.filter((item) => !item.localOnly) : NAV;
   return (
     <div className="flex min-h-full flex-col bg-background lg:flex-row">
       <header className="border-b bg-[color:var(--school-navy)] text-white lg:hidden">
@@ -41,7 +42,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <h1 className="text-base font-semibold">{SCHOOL_NAME}課表查詢</h1>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-2 pb-2">
-          {NAV.map((item) => {
+          {nav.map((item) => {
             const active = pathname === item.href;
             return (
               <Link
@@ -67,7 +68,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <p className="mt-1 text-sm text-white/70">學務發展部 · 課表查詢</p>
         </div>
         <nav className="flex flex-1 flex-col gap-0.5 p-3">
-          {NAV.map((item) => {
+          {nav.map((item) => {
             const active = pathname === item.href;
             return (
               <Link

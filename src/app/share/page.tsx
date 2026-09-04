@@ -124,7 +124,7 @@ export default function SharePage() {
               3. Windows 若被防火牆擋住，以系統管理員執行「開啟校內共用防火牆.bat」。
             </p>
             <p>
-              4. 倉庫係私人的，公開 GitHub 網站未開啟——課表有老師姓名，唔會放上公開網。
+              4. 網上唯讀版（啟用 GitHub Pages 後）：https://keithleung73.github.io/mkpkc-timetable-2026-2027/
             </p>
           </CardContent>
         </Card>

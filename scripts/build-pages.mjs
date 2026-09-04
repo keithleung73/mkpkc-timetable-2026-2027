@@ -22,12 +22,20 @@ function run(cmd, args, env = {}) {
     env: { ...process.env, ...env },
     shell: process.platform === "win32",
   });
-  if (r.status !== 0) process.exit(r.status ?? 1);
+  if (r.status !== 0) {
+    throw new Error(`${cmd} ${args.join(" ")} exited ${r.status}`);
+  }
 }
 
 fs.mkdirSync(publicData, { recursive: true });
 fs.copyFileSync(scheduleSrc, scheduleDest);
 console.log("copied data/schedule.json -> public/data/schedule.json");
+
+const nextDir = path.join(root, ".next");
+if (fs.existsSync(nextDir)) {
+  fs.rmSync(nextDir, { recursive: true, force: true });
+  console.log("cleared .next for a clean static export");
+}
 
 let parked = false;
 if (fs.existsSync(apiDir)) {
@@ -45,6 +53,13 @@ try {
     NEXT_PUBLIC_STATIC: "true",
     NEXT_PUBLIC_BASE_PATH: basePath,
   });
+  const outDir = path.join(root, "out");
+  fs.writeFileSync(path.join(outDir, ".nojekyll"), "");
+  const indexHtml = path.join(outDir, "index.html");
+  if (fs.existsSync(indexHtml)) {
+    fs.copyFileSync(indexHtml, path.join(outDir, "404.html"));
+  }
+  console.log("static export ready in ./out");
 } finally {
   if (parked && fs.existsSync(apiPark)) {
     if (fs.existsSync(apiDir)) {
@@ -54,5 +69,3 @@ try {
     console.log("restored src/app/api");
   }
 }
-
-console.log("static export ready in ./out");
