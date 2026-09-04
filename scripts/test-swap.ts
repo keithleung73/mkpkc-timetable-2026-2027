@@ -158,7 +158,7 @@ const 乙 = teacher("乙", "乙老師");
     partnerPeriodId: "p4",
   });
   assert.ok(!("error" in record), String((record as { error?: string }).error ?? ""));
-  if ("error" in record) throw new Error(record.error);
+  if ("error" in record) throw new Error(String(record.error));
   const on10 = applyConfirmedSwaps(live, "2026-09-10", [record]);
   assert.equal(teachingLessonsOnDay(on10, "振", "thu").length, 8, "調去第四節後 10/9 有 8 堂");
   assert.equal(isOccupied(on10, "振", "thu", "p4"), true);
