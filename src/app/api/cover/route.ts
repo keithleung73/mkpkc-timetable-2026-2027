@@ -8,6 +8,7 @@ import {
   validateCoverPlan,
   weekdayFromIsoDate,
 } from "@/lib/cover";
+import { coverDateError } from "@/lib/school-calendar";
 import { readCoverStore, writeCoverStore } from "@/lib/cover-store";
 import { readSchedule } from "@/lib/store";
 import { applyConfirmedSwaps } from "@/lib/swap-records";
@@ -47,6 +48,10 @@ export async function POST(req: Request) {
 
   if (action === "preview") {
     const date = body.date ?? "";
+    const closed = coverDateError(date);
+    if (closed) {
+      return NextResponse.json({ error: closed }, { status: 400 });
+    }
     const day = weekdayFromIsoDate(date);
     if (!day) {
       return NextResponse.json({ error: "請揀上課日（星期一至五）" }, { status: 400 });
@@ -86,6 +91,10 @@ export async function POST(req: Request) {
     const incoming = body.plan;
     if (!incoming) {
       return NextResponse.json({ error: "未有代堂方案" }, { status: 400 });
+    }
+    const closed = coverDateError(incoming.date);
+    if (closed) {
+      return NextResponse.json({ error: closed }, { status: 400 });
     }
     const data = scheduleForDate(incoming.date);
     const error = validateCoverPlan(data, incoming, store.balances);

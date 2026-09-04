@@ -13,7 +13,8 @@
     "lint": "eslint",
     "seed": "tsx scripts/import-official.ts",
     "test:cover": "tsx scripts/test-cover.ts",
-    "test:swap": "tsx scripts/test-swap.ts"
+    "test:swap": "tsx scripts/test-swap.ts",
+    "test:calendar": "tsx scripts/test-calendar.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -41,6 +41,7 @@ import type { ScheduleData, Teacher } from "@/lib/types";
 import { coverPdfFilename } from "@/lib/cover-pdf";
 import { filterTeachers, teacherEnglishLabels } from "@/lib/search";
 import { applyConfirmedSwaps, swapsAffectingDate, type ConfirmedSwap } from "@/lib/swap-records";
+import { coverDateError, schoolClosedReason } from "@/lib/school-calendar";
 import { coverRequest } from "@/lib/web-ops";
 import { printCoverPlan } from "@/lib/cover-print";
 import { isStaticExport } from "@/lib/runtime";
@@ -57,7 +58,7 @@ export default function CoverPage() {
     <PageBody>
       <PageHeader
         title="代堂編配"
-        description="勾選當日請假同事，系統按已確認調堂後嘅課表編配代堂（唔再用原先空堂）。盡量避開指定同事，同一星期亦盡量唔連續代多過兩日。"
+        description="勾選當日請假同事，系統按已確認調堂後嘅課表編配代堂（唔再用原先空堂）。盡量避開指定同事，同一星期亦盡量唔連續代多過兩日。學校假期同無堂日無需代堂；統測、考試、深度學習周仍可代堂，但不能調堂。"
       />
       <ScheduleGate>
         <Inner />
@@ -135,6 +136,11 @@ function Inner() {
   };
 
   const generate = () => {
+    const closed = coverDateError(date);
+    if (closed) {
+      toast.error(closed);
+      return;
+    }
     if (!day) {
       toast.error("請揀星期一至五");
       return;
@@ -258,6 +264,7 @@ function Inner() {
           <p>請假同事每堂 −1；成功代堂同事每堂 +1。未能編配嘅堂，請假人仍然扣分。</p>
           <p>病假／請假較多（結餘較負）者優先代堂，其後先睇當日原有堂數。</p>
           <p>當日原有課堂多於 {MAX_OWN_LESSONS} 節者不能代堂。</p>
+          <p>學校假期、陸運會、開放日、教師發展日等無堂日無需代堂。</p>
           <p>同一人唔可以連續兩節代堂（例如代完第三節就不能代第四節）；同自己原本課堂相鄰則可以。</p>
           <p>已確認調堂會改當日佔用：被調去上課嘅同事該節不能代堂。CLP 唔當正規課，唔擋調堂／代堂。</p>
           <p>
@@ -286,7 +293,9 @@ function Inner() {
           />
         </label>
         <div className="text-sm text-muted-foreground">
-          {day ? (
+          {schoolClosedReason(date) ? (
+            <span>{schoolClosedReason(date)}</span>
+          ) : day ? (
             <span>
               {dayLabel(day)}
               {date === hkTodayIso() ? " · 今日" : ""}
@@ -316,6 +325,15 @@ function Inner() {
           今日
         </Button>
       </div>
+
+      {coverDateError(date) ? (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p>{coverDateError(date)}</p>
+          <p className="mt-1 text-amber-900/80">
+            假期、陸運會、開放日、畢業典禮同教師發展日不用代堂。統測、考試同深度學習周仍可代堂，但不能調堂。
+          </p>
+        </div>
+      ) : null}
 
       {savedToday ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -437,7 +455,11 @@ function Inner() {
                 })
               )}
             </div>
-            <Button className="w-full" disabled={absentees.length === 0} onClick={generate}>
+            <Button
+              className="w-full"
+              disabled={absentees.length === 0 || Boolean(coverDateError(date))}
+              onClick={generate}
+            >
               <Repeat2 />
               產生代堂方案
             </Button>

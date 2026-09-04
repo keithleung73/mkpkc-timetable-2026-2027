@@ -14,6 +14,7 @@ import {
   saveSwapStore,
 } from "./browser-records";
 import { isStaticExport } from "./runtime";
+import { coverDateError } from "./school-calendar";
 import { planTeacherLeaveSwaps } from "./swap";
 import {
   applyConfirmedSwaps,
@@ -163,6 +164,8 @@ export function localCoverPost(data: ScheduleData, body: CoverBody) {
 
   if (action === "preview") {
     const date = body.date ?? "";
+    const closed = coverDateError(date);
+    if (closed) return fail(closed);
     const day = weekdayFromIsoDate(date);
     if (!day) return fail("請揀上課日（星期一至五）");
     const absentees = body.absenteeIds ?? [];
@@ -187,6 +190,8 @@ export function localCoverPost(data: ScheduleData, body: CoverBody) {
   if (action === "confirm") {
     const incoming = body.plan;
     if (!incoming) return fail("未有代堂方案");
+    const closed = coverDateError(incoming.date);
+    if (closed) return fail(closed);
     const effective = scheduleForDate(data, incoming.date);
     const error = validateCoverPlan(effective, incoming, store.balances);
     if (error) return fail(error);
