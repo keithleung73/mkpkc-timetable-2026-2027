@@ -80,6 +80,11 @@ function Inner() {
   const day = weekdayFromIsoDate(date);
 
   useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get("date");
+    if (fromUrl && weekdayFromIsoDate(fromUrl)) setDate(fromUrl);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     fetch("/api/cover", { cache: "no-store" })
       .then(async (res) => {
