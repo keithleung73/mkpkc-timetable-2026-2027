@@ -144,6 +144,18 @@ const F = teacher("F", "己");
   );
   const plan = generateCoverPlan(data, "mon", "2026-08-31", ["A"], { B: -3 });
   assert.equal(plan.assignments[0]?.coverTeacherId, "B");
+}
+
+{
+  const data = schedule(
+    [A, B],
+    [
+      lesson("abs-p1", "mon", "p1", "A"),
+      lesson("clp", "mon", "p1", "B", { kind: "meeting", subject: "CLP 中一數學", classIds: [] }),
+    ],
+  );
+  const plan = generateCoverPlan(data, "mon", "2026-08-31", ["A"], { B: -3 });
+  assert.equal(plan.assignments[0]?.coverTeacherId, "B", "CLP 唔當正規課，該節仍可代堂");
   const next = applyBalances({}, plan);
   assert.equal(next.A, -1);
   assert.equal(next.B, 1);
