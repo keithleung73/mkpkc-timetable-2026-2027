@@ -376,7 +376,7 @@ const 乙 = teacher("乙", "乙老師");
     "split_rotate",
   );
   assert.ok(!("error" in recorded), String((recorded as { error?: string }).error ?? ""));
-  if ("error" in recorded) throw new Error(recorded.error);
+  if ("error" in recorded) throw new Error(String(recorded.error));
   const onLeave = applyConfirmedSwaps(data, "2026-09-08", [recorded]);
   assert.ok(!onLeave.lessons.some((l) => l.id === "pth"), "請假日只由戲劇老師上全班");
   assert.ok(onLeave.lessons.some((l) => l.id === "drama"));
@@ -519,7 +519,7 @@ const 乙 = teacher("乙", "乙老師");
     partnerPeriodId: "p4",
   });
   assert.ok(!("error" in created));
-  if ("error" in created) throw new Error(created.error);
+  if ("error" in created) throw new Error(String(created.error));
   const revised = reviseConfirmedSwap(data, [created], created.id, {
     leaveTeacherId: "振",
     leaveDate: "2026-09-03",
@@ -528,7 +528,7 @@ const 乙 = teacher("乙", "乙老師");
     partnerPeriodId: "p4",
   });
   assert.ok(!("error" in revised));
-  if ("error" in revised) throw new Error(revised.error);
+  if ("error" in revised) throw new Error(String(revised.error));
   assert.equal(revised.saved.id, created.id, "修改應沿用原紀錄 id");
   assert.equal(revised.saved.partnerDate, "2026-09-17");
   assert.equal(revised.swaps.length, 1);

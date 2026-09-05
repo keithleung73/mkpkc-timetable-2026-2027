@@ -313,7 +313,7 @@ const F = teacher("F", "己");
     "official",
   );
   assert.ok(!("error" in merged));
-  if ("error" in merged) throw new Error(merged.error);
+  if ("error" in merged) throw new Error(String(merged.error));
   assert.equal(merged.assignments.length, 1);
   assert.equal(merged.assignments[0]?.coverTeacherId, "B");
   assert.equal(merged.leftover.length, 0, "只轉入該一節，其他堂唔當 leftover");
