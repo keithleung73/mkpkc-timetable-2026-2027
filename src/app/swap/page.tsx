@@ -646,7 +646,7 @@ function ResultCard({
                 </label>
               ))}
             </div>
-            {onRecordCover && selectedCover ? (
+            {onRecordCover && selectedCover && !confirmed ? (
               <div className="mt-2">
                 {recordedCover ? (
                   <Badge variant="secondary">已轉入代堂紀錄</Badge>
