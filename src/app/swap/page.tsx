@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowLeftRight, Check, Plus, Repeat2, Trash2, X } from "lucide-react";
+import { ArrowLeftRight, Check, Pencil, Plus, Repeat2, Trash2, X } from "lucide-react";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
 import { useSchedule } from "@/components/schedule-provider";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,11 @@ import {
 import { COVER_PERIOD_IDS, dayLabel, formatTimeRange, periodLabel } from "@/lib/constants";
 import { hkTodayIso, weekdayFromIsoDate } from "@/lib/cover";
 import { classNames, roomName } from "@/lib/queries";
+import {
+  calendarLabelsOn,
+  schoolClosedReason,
+  swapBlockedReason,
+} from "@/lib/school-calendar";
 import { filterTeachers } from "@/lib/search";
 import type { SwapPlan, SwapUnitResult } from "@/lib/swap";
 import { swapRecordKey, type ConfirmedSwap } from "@/lib/swap-records";
@@ -31,7 +36,7 @@ export default function SwapPage() {
     <PageBody>
       <PageHeader
         title="調堂安排"
-        description="老師事假／公假要調堂：可揀多日請假、指定由邊日開始搵調堂；IAL 選修會一拼調；調唔到會畀代堂建議。"
+        description="老師事假／公假要調堂：可揀多日請假、指定由邊日開始搵調堂；IAL 選修會一拼調；調唔到會畀代堂建議。學校假期、統測、考試同深度學習周沒有正規課堂，不能調堂亦不能代堂。"
       />
       <ScheduleGate>
         <SwapInner />
@@ -49,6 +54,7 @@ function SwapInner() {
   const [swapFromDate, setSwapFromDate] = useState(hkTodayIso());
   const [plan, setPlan] = useState<SwapPlan | null>(null);
   const [swaps, setSwaps] = useState<ConfirmedSwap[]>([]);
+  const [editing, setEditing] = useState<ConfirmedSwap | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -80,6 +86,13 @@ function SwapInner() {
     if (leaveDates.includes(leaveDraft)) {
       toast.message("呢日已加入");
       return;
+    }
+    const closed = schoolClosedReason(leaveDraft);
+    if (closed) {
+      toast.message(`${closed}，無需調堂及代堂，但仍會記喺請假日。`);
+    } else {
+      const blocked = swapBlockedReason(leaveDraft);
+      if (blocked) toast.message(`${blocked}會改為代堂建議。`);
     }
     setLeaveDates((cur) => [...cur, leaveDraft].sort());
     setPlan(null);
@@ -146,6 +159,7 @@ function SwapInner() {
     try {
       const json = (await swapRequest(data, { action: "undo", swapId })) as { swaps?: ConfirmedSwap[] };
       setSwaps(json.swaps ?? []);
+      setEditing((cur) => (cur?.id === swapId ? null : cur));
       toast.success("已刪除調堂紀錄");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "撤銷失敗");
@@ -212,9 +226,11 @@ function SwapInner() {
                 }}
               />
               <p className="text-xs text-muted-foreground">
-                {weekdayFromIsoDate(swapFromDate)
-                  ? `會由${dayLabel(weekdayFromIsoDate(swapFromDate)!)}起優先搜尋可對調節次`
-                  : "請揀星期一至五"}
+                {swapBlockedReason(swapFromDate)
+                  ? `${swapBlockedReason(swapFromDate)}搜尋時會自動跳過假期、統測、考試同深度學習周。`
+                  : weekdayFromIsoDate(swapFromDate)
+                    ? `會由${dayLabel(weekdayFromIsoDate(swapFromDate)!)}起優先搜尋可對調節次`
+                    : "請揀星期一至五"}
               </p>
             </label>
           </div>
@@ -239,10 +255,12 @@ function SwapInner() {
               ) : (
                 leaveDates.map((d) => {
                   const day = weekdayFromIsoDate(d);
+                  const labels = calendarLabelsOn(d);
                   return (
                     <Badge key={d} variant="secondary" className="gap-1 pr-1">
                       {d}
                       {day ? ` ${dayLabel(day)}` : ""}
+                      {labels.length ? ` · ${labels.join("、")}` : ""}
                       <button
                         type="button"
                         className="rounded p-0.5 hover:bg-black/10"
@@ -278,17 +296,22 @@ function SwapInner() {
       </Card>
 
       <ManualSwapForm
-        teacherId={teacherId}
+        teacherId={editing?.leaveTeacherId ?? teacherId}
+        editing={editing}
         onTeacherNeeded={() => toast.error("請先選擇請假老師")}
         busy={busy}
-        onSaved={(next) => setSwaps(next)}
+        onSaved={(next) => {
+          setSwaps(next);
+          setEditing(null);
+        }}
+        onCancelEdit={() => setEditing(null)}
       />
 
       {swaps.length > 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>已確認調堂紀錄</CardTitle>
-            <CardDescription>可人手刪除（−）。代堂編配會跟呢啲紀錄，而唔係原先課表。</CardDescription>
+            <CardDescription>可人手修改或刪除。代堂編配會跟呢啲紀錄，而唔係原先課表。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {swaps.map((s) => (
@@ -303,17 +326,31 @@ function SwapInner() {
                   {s.partnerDate} {periodLabel(s.partnerPeriodId)}
                   {s.partnerTeacherNames.length ? `（${s.partnerTeacherNames.join("、")}）` : "（空堂／CLP）"}
                 </span>
-                <Button size="sm" variant="outline" disabled={busy} onClick={() => void undoSwap(s.id)}>
-                  <Trash2 />
-                  刪除
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant={editing?.id === s.id ? "default" : "outline"}
+                    disabled={busy}
+                    onClick={() => {
+                      setTeacherId(s.leaveTeacherId);
+                      setEditing(s);
+                    }}
+                  >
+                    <Pencil />
+                    修改
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => void undoSwap(s.id)}>
+                    <Trash2 />
+                    刪除
+                  </Button>
+                </div>
               </div>
             ))}
           </CardContent>
         </Card>
       ) : null}
 
-      {plan ? (
+          {plan ? (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2 text-sm">
             <Badge>{plan.teacherName}</Badge>
@@ -324,11 +361,18 @@ function SwapInner() {
               請假 {plan.leaveDates.join("、")} · 由 {plan.swapFromDate} 起搵調堂
             </span>
           </div>
+          {plan.notes.length > 0 ? (
+            <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+              {plan.notes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          ) : null}
 
           {plan.results.length === 0 ? (
             <Card>
               <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                所選請假日無需處理嘅授課堂（或當日無課）。
+                所選請假日無需處理嘅授課堂（學校假期／統測／考試／深度學習周／無堂日，或當日無課）。
               </CardContent>
             </Card>
           ) : (
@@ -477,14 +521,18 @@ function ResultCard({
 
 function ManualSwapForm({
   teacherId,
+  editing,
   onTeacherNeeded,
   busy,
   onSaved,
+  onCancelEdit,
 }: {
   teacherId: string;
+  editing: ConfirmedSwap | null;
   onTeacherNeeded: () => void;
   busy: boolean;
   onSaved: (swaps: ConfirmedSwap[]) => void;
+  onCancelEdit: () => void;
 }) {
   const { data } = useSchedule();
   const [leaveDate, setLeaveDate] = useState(hkTodayIso());
@@ -495,6 +543,16 @@ function ManualSwapForm({
   const [partnerTeacherId, setPartnerTeacherId] = useState("");
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (!editing) return;
+    setLeaveDate(editing.leaveDate);
+    setLeavePeriodId(editing.leavePeriodId);
+    setPartnerDate(editing.partnerDate);
+    setPartnerPeriodId(editing.partnerPeriodId);
+    setPartnerTeacherId(editing.partnerTeacherIds[0] ?? "");
+    setPartnerQ("");
+  }, [editing]);
+
   const partners = useMemo(
     () => filterTeachers(data?.teachers ?? [], partnerQ),
     [data, partnerQ],
@@ -502,7 +560,7 @@ function ManualSwapForm({
 
   if (!data) return null;
 
-  const add = async () => {
+  const save = async () => {
     if (!teacherId) {
       onTeacherNeeded();
       return;
@@ -510,7 +568,8 @@ function ManualSwapForm({
     setSaving(true);
     try {
       const json = (await swapRequest(data, {
-        action: "add",
+        action: editing ? "update" : "add",
+        swapId: editing?.id,
         leaveTeacherId: teacherId,
         leaveDate,
         leavePeriodId,
@@ -519,9 +578,9 @@ function ManualSwapForm({
         partnerTeacherId: partnerTeacherId || undefined,
       })) as { swaps?: ConfirmedSwap[] };
       onSaved(json.swaps ?? []);
-      toast.success("已人手加入調堂紀錄");
+      toast.success(editing ? "已修改調堂紀錄" : "已人手加入調堂紀錄");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "加入失敗");
+      toast.error(e instanceof Error ? e.message : editing ? "修改失敗" : "加入失敗");
     } finally {
       setSaving(false);
     }
@@ -530,9 +589,13 @@ function ManualSwapForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>人手加入調堂紀錄（＋）</CardTitle>
+        <CardTitle>{editing ? "修改已確認調堂紀錄" : "人手加入調堂紀錄（＋）"}</CardTitle>
         <CardDescription>
-          例如將課堂調去原本空堂／CLP。對手老師可留空（只搬去該節）。刪除用上面紀錄嘅「刪除」。
+          {editing
+            ? `正在改 ${editing.leaveTeacherName} ${editing.leaveDate} ${periodLabel(editing.leavePeriodId)}。儲存後代堂會跟新安排。`
+            : "例如將課堂調去原本空堂／CLP。對手老師可留空（只搬去該節）。已確認紀錄可人手修改或刪除。"}
+          {" "}
+          學校假期、統測、考試同深度學習周沒有正規課堂，不能加入或改去嗰啲日子。
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
@@ -540,6 +603,9 @@ function ManualSwapForm({
           <label className="grid gap-1 text-sm">
             <span className="text-muted-foreground">原課堂日期</span>
             <Input type="date" value={leaveDate} onChange={(e) => setLeaveDate(e.target.value)} />
+            {swapBlockedReason(leaveDate) ? (
+              <p className="text-xs text-destructive">{swapBlockedReason(leaveDate)}</p>
+            ) : null}
           </label>
           <label className="grid gap-1 text-sm">
             <span className="text-muted-foreground">原節次</span>
@@ -559,6 +625,9 @@ function ManualSwapForm({
           <label className="grid gap-1 text-sm">
             <span className="text-muted-foreground">調往日期</span>
             <Input type="date" value={partnerDate} onChange={(e) => setPartnerDate(e.target.value)} />
+            {swapBlockedReason(partnerDate) ? (
+              <p className="text-xs text-destructive">{swapBlockedReason(partnerDate)}</p>
+            ) : null}
           </label>
           <label className="grid gap-1 text-sm">
             <span className="text-muted-foreground">調往節次</span>
@@ -607,11 +676,17 @@ function ManualSwapForm({
             </Select>
           </label>
         </div>
-        <div>
-          <Button type="button" variant="outline" disabled={busy || saving} onClick={() => void add()}>
-            <Plus />
-            加入紀錄
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" disabled={busy || saving} onClick={() => void save()}>
+            {editing ? <Check /> : <Plus />}
+            {editing ? "儲存修改" : "加入紀錄"}
           </Button>
+          {editing ? (
+            <Button type="button" variant="ghost" disabled={busy || saving} onClick={onCancelEdit}>
+              <X />
+              取消修改
+            </Button>
+          ) : null}
         </div>
       </CardContent>
     </Card>

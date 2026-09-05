@@ -5,10 +5,11 @@ import { planTeacherLeaveSwaps } from "@/lib/swap";
 import {
   confirmedSwapFromSuggestion,
   confirmedSwapManual,
+  reviseConfirmedSwap,
   swapConflicts,
   type ConfirmedSwap,
 } from "@/lib/swap-records";
-import { addConfirmedSwap, readSwapStore, removeConfirmedSwap } from "@/lib/swap-store";
+import { addConfirmedSwap, readSwapStore, removeConfirmedSwap, writeConfirmedSwaps } from "@/lib/swap-store";
 
 export async function GET() {
   return NextResponse.json(readSwapStore());
@@ -117,6 +118,25 @@ export async function POST(req: Request) {
     if (conflict) return NextResponse.json({ error: conflict }, { status: 400 });
     const next = addConfirmedSwap(record);
     return NextResponse.json({ ok: true, saved: record, swaps: next.swaps });
+  }
+
+  if (action === "update") {
+    const swapId = body.swapId;
+    if (!swapId) return NextResponse.json({ error: "未指定要修改嘅紀錄" }, { status: 400 });
+    if (!body.leaveTeacherId || !body.leaveDate || !body.leavePeriodId || !body.partnerDate || !body.partnerPeriodId) {
+      return NextResponse.json({ error: "請填原課堂同調往日期／節次" }, { status: 400 });
+    }
+    const revised = reviseConfirmedSwap(data, readSwapStore().swaps, swapId, {
+      leaveTeacherId: body.leaveTeacherId,
+      leaveDate: body.leaveDate,
+      leavePeriodId: body.leavePeriodId,
+      partnerDate: body.partnerDate,
+      partnerPeriodId: body.partnerPeriodId,
+      partnerTeacherId: body.partnerTeacherId || undefined,
+    });
+    if ("error" in revised) return NextResponse.json({ error: revised.error }, { status: 400 });
+    writeConfirmedSwaps(revised.swaps);
+    return NextResponse.json({ ok: true, saved: revised.saved, swaps: revised.swaps });
   }
 
   if (action === "undo") {

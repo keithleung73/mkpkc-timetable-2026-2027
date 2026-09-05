@@ -8,6 +8,7 @@ import {
   applyConfirmedSwaps,
   confirmedSwapManual,
   makeConfirmedSwap,
+  reviseConfirmedSwap,
 } from "../src/lib/swap-records";
 import type { Lesson, ScheduleData, Teacher } from "../src/lib/types";
 
@@ -237,6 +238,50 @@ const 乙 = teacher("乙", "乙老師");
     reason: "test",
   });
   assert.ok(rec.id.startsWith("swap-"));
+}
+
+{
+  const data = schedule([振], [lesson("振-p7", "thu", "p7", "振")]);
+  const created = confirmedSwapManual(data, {
+    leaveTeacherId: "振",
+    leaveDate: "2026-09-03",
+    leavePeriodId: "p7",
+    partnerDate: "2026-09-10",
+    partnerPeriodId: "p4",
+  });
+  assert.ok(!("error" in created));
+  if ("error" in created) throw new Error(created.error);
+  const revised = reviseConfirmedSwap(data, [created], created.id, {
+    leaveTeacherId: "振",
+    leaveDate: "2026-09-03",
+    leavePeriodId: "p7",
+    partnerDate: "2026-09-17",
+    partnerPeriodId: "p4",
+  });
+  assert.ok(!("error" in revised));
+  if ("error" in revised) throw new Error(revised.error);
+  assert.equal(revised.saved.id, created.id, "修改應沿用原紀錄 id");
+  assert.equal(revised.saved.partnerDate, "2026-09-17");
+  assert.equal(revised.swaps.length, 1);
+
+  const blocked = reviseConfirmedSwap(data, [created], created.id, {
+    leaveTeacherId: "振",
+    leaveDate: "2026-09-03",
+    leavePeriodId: "p7",
+    partnerDate: "2026-10-01",
+    partnerPeriodId: "p4",
+  });
+  assert.ok("error" in blocked);
+  assert.match(String(blocked.error), /國慶日/);
+
+  const missing = reviseConfirmedSwap(data, [created], "swap-not-exist", {
+    leaveTeacherId: "振",
+    leaveDate: "2026-09-03",
+    leavePeriodId: "p7",
+    partnerDate: "2026-09-17",
+    partnerPeriodId: "p4",
+  });
+  assert.ok("error" in missing);
 }
 
 console.log("swap / CLP / confirmed timetable ok");

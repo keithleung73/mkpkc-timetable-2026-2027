@@ -1,5 +1,6 @@
 import { addDaysIso, weekdayFromIsoDate } from "./cover";
 import { isTeachingLesson } from "./lesson-kind";
+import { isSwapAllowedDate, swapBlockedReason, swapPairError } from "./school-calendar";
 import type { DayId, Lesson, ScheduleData } from "./types";
 
 export type ConfirmedSwap = {
@@ -37,7 +38,7 @@ export function resolveDateForWeekday(
   const exclude = new Set(excludeDates);
   let d = fromIso;
   for (let i = 0; i < 28; i++) {
-    if (weekdayFromIsoDate(d) === day && !exclude.has(d)) return d;
+    if (weekdayFromIsoDate(d) === day && !exclude.has(d) && isSwapAllowedDate(d)) return d;
     d = addDaysIso(d, 1);
   }
   return null;
@@ -49,7 +50,7 @@ export function swapSearchDates(swapFromDate: string, leaveDates: string[], days
   const out: string[] = [];
   let d = swapFromDate;
   for (let i = 0; i < days; i++) {
-    if (weekdayFromIsoDate(d) && !leave.has(d)) out.push(d);
+    if (isSwapAllowedDate(d) && !leave.has(d)) out.push(d);
     d = addDaysIso(d, 1);
   }
   return out;
@@ -130,9 +131,13 @@ export function confirmedSwapFromSuggestion(
   const leaveDay = weekdayFromIsoDate(leaveDate);
   const partnerWeekday = weekdayFromIsoDate(partnerDate);
   if (!leaveDay) return { error: "請假日唔係上課日" };
+  const leaveBlock = swapBlockedReason(leaveDate);
+  if (leaveBlock) return { error: leaveBlock };
   if (!partnerWeekday || partnerWeekday !== partnerDay) {
     return { error: "調往日期同星期唔對" };
   }
+  const partnerBlock = swapBlockedReason(partnerDate);
+  if (partnerBlock) return { error: partnerBlock };
   if (leaveDate === partnerDate && leavePeriodId === partnerPeriodId) {
     return { error: "調往節次唔可以同原節次一樣" };
   }
@@ -159,17 +164,21 @@ export function confirmedSwapFromSuggestion(
   });
 }
 
+export type ManualSwapInput = {
+  leaveTeacherId: string;
+  leaveDate: string;
+  leavePeriodId: string;
+  partnerDate: string;
+  partnerPeriodId: string;
+  partnerTeacherId?: string;
+};
+
 export function confirmedSwapManual(
   data: ScheduleData,
-  input: {
-    leaveTeacherId: string;
-    leaveDate: string;
-    leavePeriodId: string;
-    partnerDate: string;
-    partnerPeriodId: string;
-    partnerTeacherId?: string;
-  },
+  input: ManualSwapInput,
 ): ConfirmedSwap | { error: string } {
+  const blocked = swapPairError(input.leaveDate, input.partnerDate);
+  if (blocked) return { error: blocked };
   const leaveDay = weekdayFromIsoDate(input.leaveDate);
   const partnerDay = weekdayFromIsoDate(input.partnerDate);
   if (!leaveDay) return { error: "原課堂日期只能係星期一至五" };
@@ -196,6 +205,31 @@ export function confirmedSwapManual(
     partnerLessons,
     reason,
   );
+}
+
+/** 人手修改已確認調堂；沿用原紀錄 id，衝突檢查會略過自己 */
+export function reviseConfirmedSwap(
+  data: ScheduleData,
+  swaps: ConfirmedSwap[],
+  swapId: string,
+  input: ManualSwapInput,
+): { swaps: ConfirmedSwap[]; saved: ConfirmedSwap } | { error: string } {
+  const current = swaps.find((s) => s.id === swapId);
+  if (!current) return { error: "找不到要修改嘅調堂紀錄" };
+  const rebuilt = confirmedSwapManual(data, input);
+  if ("error" in rebuilt) return rebuilt;
+  const saved: ConfirmedSwap = {
+    ...rebuilt,
+    id: current.id,
+    confirmedAt: new Date().toISOString(),
+    reason: rebuilt.reason.replace(/^人手/, "人手修改"),
+  };
+  const conflict = swapConflicts(swaps, saved);
+  if (conflict) return { error: conflict };
+  return {
+    saved,
+    swaps: swaps.map((s) => (s.id === swapId ? saved : s)),
+  };
 }
 
 function relocateLesson(

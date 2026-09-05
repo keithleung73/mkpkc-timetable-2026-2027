@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { FileDown, Minus, Plus, Repeat2 } from "lucide-react";
+import { FileDown, Minus, Pencil, Plus, Repeat2 } from "lucide-react";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
 import { useSchedule } from "@/components/schedule-provider";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +41,7 @@ import type { ScheduleData, Teacher } from "@/lib/types";
 import { coverPdfFilename } from "@/lib/cover-pdf";
 import { filterTeachers, teacherEnglishLabels } from "@/lib/search";
 import { applyConfirmedSwaps, swapsAffectingDate, type ConfirmedSwap } from "@/lib/swap-records";
+import { coverDateError, schoolClosedReason } from "@/lib/school-calendar";
 import { coverRequest } from "@/lib/web-ops";
 import { printCoverPlan } from "@/lib/cover-print";
 import { isStaticExport } from "@/lib/runtime";
@@ -57,7 +58,7 @@ export default function CoverPage() {
     <PageBody>
       <PageHeader
         title="代堂編配"
-        description="勾選當日請假同事，系統按已確認調堂後嘅課表編配代堂（唔再用原先空堂）。盡量避開指定同事，同一星期亦盡量唔連續代多過兩日。"
+        description="勾選當日請假同事，系統按已確認調堂後嘅課表編配代堂（唔再用原先空堂）。盡量避開指定同事，同一星期亦盡量唔連續代多過兩日。學校假期、統測、考試、深度學習周同其他無堂日沒有正規課堂，不能調堂亦不能代堂。"
       />
       <ScheduleGate>
         <Inner />
@@ -135,6 +136,11 @@ function Inner() {
   };
 
   const generate = () => {
+    const closed = coverDateError(date);
+    if (closed) {
+      toast.error(closed);
+      return;
+    }
     if (!day) {
       toast.error("請揀星期一至五");
       return;
@@ -207,6 +213,20 @@ function Inner() {
     }
   };
 
+  const editSaved = (saved: SavedCoverPlan) => {
+    setDate(saved.date);
+    setAbsentees([...saved.absentees]);
+    setPlan({
+      day: saved.day,
+      date: saved.date,
+      absentees: [...saved.absentees],
+      slots: saved.slots,
+      assignments: saved.assignments,
+      leftover: saved.leftover,
+    });
+    toast.message("已載入呢日入帳方案，改完再撳「覆蓋並入帳」。刪除用「撤銷」。");
+  };
+
   const undo = async (planId: string) => {
     setBusy(true);
     try {
@@ -258,6 +278,7 @@ function Inner() {
           <p>請假同事每堂 −1；成功代堂同事每堂 +1。未能編配嘅堂，請假人仍然扣分。</p>
           <p>病假／請假較多（結餘較負）者優先代堂，其後先睇當日原有堂數。</p>
           <p>當日原有課堂多於 {MAX_OWN_LESSONS} 節者不能代堂。</p>
+          <p>學校假期、統測、考試、深度學習周、陸運會、開放日、教師發展日等無堂日無需代堂。</p>
           <p>同一人唔可以連續兩節代堂（例如代完第三節就不能代第四節）；同自己原本課堂相鄰則可以。</p>
           <p>已確認調堂會改當日佔用：被調去上課嘅同事該節不能代堂。CLP 唔當正規課，唔擋調堂／代堂。</p>
           <p>
@@ -286,7 +307,9 @@ function Inner() {
           />
         </label>
         <div className="text-sm text-muted-foreground">
-          {day ? (
+          {schoolClosedReason(date) ? (
+            <span>{schoolClosedReason(date)}</span>
+          ) : day ? (
             <span>
               {dayLabel(day)}
               {date === hkTodayIso() ? " · 今日" : ""}
@@ -317,6 +340,15 @@ function Inner() {
         </Button>
       </div>
 
+      {coverDateError(date) ? (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p>{coverDateError(date)}</p>
+          <p className="mt-1 text-amber-900/80">
+            假期、統測、考試、深度學習周、陸運會、開放日、畢業典禮同教師發展日都沒有正規課堂，不用調堂亦不用代堂。
+          </p>
+        </div>
+      ) : null}
+
       {savedToday ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           呢日已有入帳方案（{savedToday.assignments.length} 堂已編、
@@ -326,9 +358,19 @@ function Inner() {
             size="sm"
             variant="outline"
             disabled={busy}
+            onClick={() => editSaved(savedToday)}
+          >
+            <Pencil />
+            修改
+          </Button>
+          <Button
+            className="ml-2"
+            size="sm"
+            variant="outline"
+            disabled={busy}
             onClick={() => void undo(savedToday.id)}
           >
-            撤銷當日入帳
+            刪除當日入帳
           </Button>
           <Button
             className="ml-2"
@@ -437,7 +479,11 @@ function Inner() {
                 })
               )}
             </div>
-            <Button className="w-full" disabled={absentees.length === 0} onClick={generate}>
+            <Button
+              className="w-full"
+              disabled={absentees.length === 0 || Boolean(coverDateError(date))}
+              onClick={generate}
+            >
               <Repeat2 />
               產生代堂方案
             </Button>
@@ -527,7 +573,7 @@ function Inner() {
         <Card>
           <CardHeader>
             <CardTitle>最近入帳</CardTitle>
-            <CardDescription>撤銷會還原該日加減分。</CardDescription>
+            <CardDescription>可人手修改後再覆蓋入帳，或撤銷刪除並還原加減分。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {history.slice(0, 8).map((p) => (
@@ -539,12 +585,16 @@ function Inner() {
                   {p.date} {dayLabel(p.day)} · 已編 {p.assignments.length}／{p.slots.length} 堂
                 </span>
                 <div className="flex gap-2">
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => editSaved(p)}>
+                    <Pencil />
+                    修改
+                  </Button>
                   <Button size="sm" variant="outline" disabled={busy} onClick={() => void exportPdf(p)}>
                     <FileDown />
                     匯出 PDF
                   </Button>
                   <Button size="sm" variant="outline" disabled={busy} onClick={() => void undo(p.id)}>
-                    撤銷
+                    刪除
                   </Button>
                 </div>
               </div>

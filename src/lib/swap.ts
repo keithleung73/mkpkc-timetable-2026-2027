@@ -6,6 +6,7 @@ import {
 import { weekdayFromIsoDate } from "./cover";
 import { isTeachingLesson, lessonOccupiesTeacher } from "./lesson-kind";
 import { classTokenMatches, substituteCandidates } from "./queries";
+import { schoolClosedReason, swapBlockedReason } from "./school-calendar";
 import { swapSearchDates } from "./swap-records";
 import type { DayId, Lesson, ScheduleData } from "./types";
 
@@ -59,6 +60,7 @@ export type SwapPlan = {
   teacherName: string;
   leaveDates: string[];
   swapFromDate: string;
+  notes: string[];
   results: SwapUnitResult[];
   summary: {
     total: number;
@@ -196,6 +198,7 @@ export function buildLeaveUnits(
   for (const leaveDate of [...new Set(leaveDates)].sort()) {
     const day = weekdayFromIsoDate(leaveDate);
     if (!day) continue;
+    if (schoolClosedReason(leaveDate)) continue;
     const periods = new Set(coverPeriods(day));
     const mine = data.lessons.filter(
       (l) =>
@@ -448,10 +451,31 @@ export function planTeacherLeaveSwaps(
 ): SwapPlan {
   const teacher = data.teachers.find((t) => t.id === teacherId);
   const teacherName = teacher?.name ?? teacherId;
-  const units = buildLeaveUnits(data, teacherId, leaveDates);
+  const uniqueLeave = [...new Set(leaveDates)].sort();
+  const notes: string[] = [];
+  const teachingLeave: string[] = [];
+  for (const date of uniqueLeave) {
+    const closed = schoolClosedReason(date);
+    if (closed) {
+      notes.push(`${date} ${closed}，無需調堂及代堂。`);
+      continue;
+    }
+    teachingLeave.push(date);
+  }
+  const units = buildLeaveUnits(data, teacherId, teachingLeave);
   const searchDates = swapSearchDates(swapFromDate, leaveDates);
 
   const results: SwapUnitResult[] = units.map((unit) => {
+    const calendarBlock = swapBlockedReason(unit.leaveDate);
+    if (calendarBlock) {
+      return {
+        unit,
+        status: "blocked" as const,
+        coverSuggestions: coverForUnit(data, unit, teacherId),
+        blockers: [calendarBlock],
+      };
+    }
+
     if (unit.kind === "elective_blocked") {
       return {
         unit,
@@ -496,8 +520,9 @@ export function planTeacherLeaveSwaps(
   return {
     teacherId,
     teacherName,
-    leaveDates: [...new Set(leaveDates)].sort(),
+    leaveDates: uniqueLeave,
     swapFromDate,
+    notes,
     results,
     summary: {
       total: results.length,
