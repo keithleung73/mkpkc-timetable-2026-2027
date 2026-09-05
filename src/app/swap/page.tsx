@@ -36,7 +36,7 @@ export default function SwapPage() {
     <PageBody>
       <PageHeader
         title="調堂安排"
-        description="老師事假／公假要調堂：可揀多日請假、指定由邊日開始搵調堂；IAL 選修會一拼調；調唔到會畀代堂建議。學校假期、統測、考試同深度學習周不能調堂。"
+        description="老師事假／公假要調堂：可揀多日請假、指定由邊日開始搵調堂；IAL 選修會一拼調；調唔到會畀代堂建議。學校假期、統測、考試同深度學習周沒有正規課堂，不能調堂亦不能代堂。"
       />
       <ScheduleGate>
         <SwapInner />
@@ -88,7 +88,7 @@ function SwapInner() {
     }
     const closed = schoolClosedReason(leaveDraft);
     if (closed) {
-      toast.message(`${closed}，無需調堂，但仍會記喺請假日。`);
+      toast.message(`${closed}，無需調堂及代堂，但仍會記喺請假日。`);
     } else {
       const blocked = swapBlockedReason(leaveDraft);
       if (blocked) toast.message(`${blocked}會改為代堂建議。`);
@@ -351,7 +351,7 @@ function SwapInner() {
           {plan.results.length === 0 ? (
             <Card>
               <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                所選請假日無需處理嘅授課堂（學校假期／無堂日，或當日無課）。
+                所選請假日無需處理嘅授課堂（學校假期／統測／考試／深度學習周／無堂日，或當日無課）。
               </CardContent>
             </Card>
           ) : (
@@ -555,7 +555,7 @@ function ManualSwapForm({
       <CardHeader>
         <CardTitle>人手加入調堂紀錄（＋）</CardTitle>
         <CardDescription>
-          例如將課堂調去原本空堂／CLP。對手老師可留空（只搬去該節）。刪除用上面紀錄嘅「刪除」。學校假期、統測、考試同深度學習周不能加入調堂。
+          例如將課堂調去原本空堂／CLP。對手老師可留空（只搬去該節）。刪除用上面紀錄嘅「刪除」。學校假期、統測、考試同深度學習周沒有正規課堂，不能加入調堂。
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">

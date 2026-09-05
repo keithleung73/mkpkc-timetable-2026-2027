@@ -2,7 +2,7 @@ import { weekdayFromIsoDate } from "./cover";
 
 /**
  * 萬鈞伯裘書院 2026–2027 年度校曆表（學生）（第 11 稿，2026-6-1）。
- * 學校假期、統測、考試、深度學習周不能調堂。
+ * 學校假期、統測、考試、深度學習周沒有正規課堂，不能調堂亦不能代堂。
  */
 export const SCHOOL_CALENDAR_SOURCE =
   "萬鈞伯裘書院 2026-2027 年度校曆表（第 11 稿，2026-6-1）";
@@ -20,7 +20,7 @@ export type CalendarEvent = {
   end: string;
   kind: CalendarKind;
   label: string;
-  /** 學生不用上課／無正規課堂（假期、陸運會、開放日、教師發展日等） */
+  /** 無正規課堂（假期、統測、考試、深度學習周、陸運會、開放日、教師發展日等） */
   closesSchool: boolean;
 };
 
@@ -43,14 +43,14 @@ export const SCHOOL_CALENDAR: CalendarEvent[] = [
     end: "2026-10-30",
     kind: "assessment",
     label: "第一次統測（中四至中六）",
-    closesSchool: false,
+    closesSchool: true,
   },
   {
     start: "2026-10-27",
     end: "2026-10-30",
     kind: "dlw",
     label: "深度學習周（Deep Learning Week）",
-    closesSchool: false,
+    closesSchool: true,
   },
   { start: "2026-11-20", end: "2026-11-20", kind: "no_class", label: "全校旅行", closesSchool: true },
   { start: "2026-12-04", end: "2026-12-05", kind: "no_class", label: "學校開放日", closesSchool: true },
@@ -60,7 +60,7 @@ export const SCHOOL_CALENDAR: CalendarEvent[] = [
     end: "2026-12-11",
     kind: "dlw",
     label: "深度學習周（Deep Learning Week）",
-    closesSchool: false,
+    closesSchool: true,
   },
   {
     start: "2026-12-23",
@@ -74,7 +74,7 @@ export const SCHOOL_CALENDAR: CalendarEvent[] = [
     end: "2027-01-20",
     kind: "exam",
     label: "第一次考試／中六畢業考試",
-    closesSchool: false,
+    closesSchool: true,
   },
   { start: "2027-02-04", end: "2027-02-16", kind: "holiday", label: "農曆新年假期", closesSchool: true },
   {
@@ -101,7 +101,7 @@ export const SCHOOL_CALENDAR: CalendarEvent[] = [
     end: "2027-04-09",
     kind: "assessment",
     label: "第二次統測（中四至中五）",
-    closesSchool: false,
+    closesSchool: true,
   },
   { start: "2027-05-01", end: "2027-05-01", kind: "holiday", label: "勞動節", closesSchool: true },
   {
@@ -109,7 +109,7 @@ export const SCHOOL_CALENDAR: CalendarEvent[] = [
     end: "2027-05-07",
     kind: "dlw",
     label: "深度學習周（環球自主學習週）",
-    closesSchool: false,
+    closesSchool: true,
   },
   { start: "2027-05-13", end: "2027-05-13", kind: "holiday", label: "佛誕", closesSchool: true },
   { start: "2027-05-27", end: "2027-05-27", kind: "no_class", label: "畢業典禮", closesSchool: true },
@@ -121,13 +121,13 @@ export const SCHOOL_CALENDAR: CalendarEvent[] = [
     closesSchool: true,
   },
   { start: "2027-06-09", end: "2027-06-09", kind: "holiday", label: "端午節", closesSchool: true },
-  { start: "2027-06-10", end: "2027-06-23", kind: "exam", label: "第二次考試", closesSchool: false },
+  { start: "2027-06-10", end: "2027-06-23", kind: "exam", label: "第二次考試", closesSchool: true },
   {
     start: "2027-06-28",
     end: "2027-07-02",
     kind: "dlw",
     label: "深度學習周（環球自主學習週）",
-    closesSchool: false,
+    closesSchool: true,
   },
   {
     start: "2027-07-01",
@@ -160,7 +160,7 @@ export function calendarLabelsOn(iso: string): string[] {
   return [...new Set(calendarEventsOn(iso).map((event) => event.label))];
 }
 
-/** 星期一至五，而且唔係假期／無堂日／教師發展日 */
+/** 星期一至五，而且唔係假期／統測／考試／深度學習周／無堂日 */
 export function isSchoolDay(iso: string): boolean {
   if (!weekdayFromIsoDate(iso)) return false;
   return !calendarEventsOn(iso).some((event) => event.closesSchool);
@@ -179,7 +179,7 @@ export function swapBlockedReason(iso: string): string | null {
   return `該日為${joinZh(labels)}，不能調堂。`;
 }
 
-/** 假期／無堂日說明；統測、考試、深度學習周仍可能需要代堂，故回傳 null */
+/** 假期、統測、考試、深度學習周等無正規課堂說明 */
 export function schoolClosedReason(iso: string): string | null {
   if (!isValidIsoDate(iso)) return "請揀有效日期";
   if (!weekdayFromIsoDate(iso)) return "唔係上課日（星期六／日）";

@@ -457,7 +457,7 @@ export function planTeacherLeaveSwaps(
   for (const date of uniqueLeave) {
     const closed = schoolClosedReason(date);
     if (closed) {
-      notes.push(`${date} ${closed}，無需調堂。`);
+      notes.push(`${date} ${closed}，無需調堂及代堂。`);
       continue;
     }
     teachingLeave.push(date);
@@ -472,7 +472,7 @@ export function planTeacherLeaveSwaps(
         unit,
         status: "blocked" as const,
         coverSuggestions: coverForUnit(data, unit, teacherId),
-        blockers: [`${calendarBlock}請改用代堂編配。`],
+        blockers: [calendarBlock],
       };
     }
 

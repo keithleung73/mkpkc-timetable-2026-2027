@@ -74,23 +74,24 @@ const 乙 = teacher("乙", "乙老師");
 }
 
 {
-  assert.equal(isSchoolDay("2026-10-27"), true, "統測／深度學習周學生仍返學");
+  assert.equal(isSchoolDay("2026-10-27"), false, "統測／深度學習周無正規課堂");
   assert.equal(isSwapAllowedDate("2026-10-27"), false);
   const reason = swapBlockedReason("2026-10-27") ?? "";
   assert.match(reason, /統測/);
   assert.match(reason, /深度學習周/);
-  assert.equal(schoolClosedReason("2026-10-27"), null, "統測日仍可代堂");
-  assert.equal(coverDateError("2026-10-27"), null);
+  assert.match(schoolClosedReason("2026-10-27") ?? "", /統測|深度學習周/);
+  assert.match(coverDateError("2026-10-27") ?? "", /無需代堂/);
 }
 
 {
+  assert.equal(isSchoolDay("2027-01-07"), false);
   assert.equal(isSwapAllowedDate("2027-01-07"), false);
   assert.match(swapBlockedReason("2027-01-07") ?? "", /考試/);
-  assert.equal(coverDateError("2027-01-07"), null, "考試日仍可代堂");
-  assert.match(swapBlockedReason("2026-12-08") ?? "", /深度學習周/);
-  assert.match(swapBlockedReason("2027-05-03") ?? "", /深度學習周|環球自主學習/);
-  assert.match(swapBlockedReason("2027-04-06") ?? "", /統測/);
-  assert.match(swapBlockedReason("2027-06-10") ?? "", /考試/);
+  assert.match(coverDateError("2027-01-07") ?? "", /無需代堂/);
+  assert.match(coverDateError("2026-12-08") ?? "", /深度學習周/);
+  assert.match(coverDateError("2027-05-03") ?? "", /深度學習周|環球自主學習/);
+  assert.match(coverDateError("2027-04-06") ?? "", /統測/);
+  assert.match(coverDateError("2027-06-10") ?? "", /考試/);
 }
 
 {
@@ -149,11 +150,8 @@ const 乙 = teacher("乙", "乙老師");
     [lesson("振-p2", "tue", "p2", "振"), lesson("乙-p5", "wed", "p5", "乙", { classIds: ["2D"] })],
   );
   const plan = planTeacherLeaveSwaps(data, "振", ["2026-10-27"], "2026-10-27");
-  assert.equal(plan.results.length, 1);
-  assert.equal(plan.results[0]?.status, "blocked");
-  assert.match(plan.results[0]?.blockers[0] ?? "", /統測|深度學習周/);
-  assert.equal(plan.results[0]?.swap, undefined);
-  assert.ok((plan.results[0]?.coverSuggestions.length ?? 0) >= 0);
+  assert.equal(plan.results.length, 0, "統測／深度學習周無需調堂單位");
+  assert.ok(plan.notes.some((n) => /統測|深度學習周/.test(n) && n.includes("無需調堂及代堂")));
 }
 
 {
