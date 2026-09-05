@@ -164,16 +164,18 @@ export function confirmedSwapFromSuggestion(
   });
 }
 
+export type ManualSwapInput = {
+  leaveTeacherId: string;
+  leaveDate: string;
+  leavePeriodId: string;
+  partnerDate: string;
+  partnerPeriodId: string;
+  partnerTeacherId?: string;
+};
+
 export function confirmedSwapManual(
   data: ScheduleData,
-  input: {
-    leaveTeacherId: string;
-    leaveDate: string;
-    leavePeriodId: string;
-    partnerDate: string;
-    partnerPeriodId: string;
-    partnerTeacherId?: string;
-  },
+  input: ManualSwapInput,
 ): ConfirmedSwap | { error: string } {
   const blocked = swapPairError(input.leaveDate, input.partnerDate);
   if (blocked) return { error: blocked };
@@ -203,6 +205,31 @@ export function confirmedSwapManual(
     partnerLessons,
     reason,
   );
+}
+
+/** 人手修改已確認調堂；沿用原紀錄 id，衝突檢查會略過自己 */
+export function reviseConfirmedSwap(
+  data: ScheduleData,
+  swaps: ConfirmedSwap[],
+  swapId: string,
+  input: ManualSwapInput,
+): { swaps: ConfirmedSwap[]; saved: ConfirmedSwap } | { error: string } {
+  const current = swaps.find((s) => s.id === swapId);
+  if (!current) return { error: "找不到要修改嘅調堂紀錄" };
+  const rebuilt = confirmedSwapManual(data, input);
+  if ("error" in rebuilt) return rebuilt;
+  const saved: ConfirmedSwap = {
+    ...rebuilt,
+    id: current.id,
+    confirmedAt: new Date().toISOString(),
+    reason: rebuilt.reason.replace(/^人手/, "人手修改"),
+  };
+  const conflict = swapConflicts(swaps, saved);
+  if (conflict) return { error: conflict };
+  return {
+    saved,
+    swaps: swaps.map((s) => (s.id === swapId ? saved : s)),
+  };
 }
 
 function relocateLesson(

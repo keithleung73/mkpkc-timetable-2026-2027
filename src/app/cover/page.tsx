@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { FileDown, Minus, Plus, Repeat2 } from "lucide-react";
+import { FileDown, Minus, Pencil, Plus, Repeat2 } from "lucide-react";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
 import { useSchedule } from "@/components/schedule-provider";
 import { Badge } from "@/components/ui/badge";
@@ -213,6 +213,20 @@ function Inner() {
     }
   };
 
+  const editSaved = (saved: SavedCoverPlan) => {
+    setDate(saved.date);
+    setAbsentees([...saved.absentees]);
+    setPlan({
+      day: saved.day,
+      date: saved.date,
+      absentees: [...saved.absentees],
+      slots: saved.slots,
+      assignments: saved.assignments,
+      leftover: saved.leftover,
+    });
+    toast.message("已載入呢日入帳方案，改完再撳「覆蓋並入帳」。刪除用「撤銷」。");
+  };
+
   const undo = async (planId: string) => {
     setBusy(true);
     try {
@@ -344,9 +358,19 @@ function Inner() {
             size="sm"
             variant="outline"
             disabled={busy}
+            onClick={() => editSaved(savedToday)}
+          >
+            <Pencil />
+            修改
+          </Button>
+          <Button
+            className="ml-2"
+            size="sm"
+            variant="outline"
+            disabled={busy}
             onClick={() => void undo(savedToday.id)}
           >
-            撤銷當日入帳
+            刪除當日入帳
           </Button>
           <Button
             className="ml-2"
@@ -549,7 +573,7 @@ function Inner() {
         <Card>
           <CardHeader>
             <CardTitle>最近入帳</CardTitle>
-            <CardDescription>撤銷會還原該日加減分。</CardDescription>
+            <CardDescription>可人手修改後再覆蓋入帳，或撤銷刪除並還原加減分。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {history.slice(0, 8).map((p) => (
@@ -561,12 +585,16 @@ function Inner() {
                   {p.date} {dayLabel(p.day)} · 已編 {p.assignments.length}／{p.slots.length} 堂
                 </span>
                 <div className="flex gap-2">
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => editSaved(p)}>
+                    <Pencil />
+                    修改
+                  </Button>
                   <Button size="sm" variant="outline" disabled={busy} onClick={() => void exportPdf(p)}>
                     <FileDown />
                     匯出 PDF
                   </Button>
                   <Button size="sm" variant="outline" disabled={busy} onClick={() => void undo(p.id)}>
-                    撤銷
+                    刪除
                   </Button>
                 </div>
               </div>

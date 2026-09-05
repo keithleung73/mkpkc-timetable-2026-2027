@@ -37,6 +37,11 @@ export function addConfirmedSwap(swap: ConfirmedSwap) {
   return readSwapStore();
 }
 
+export function writeConfirmedSwaps(swaps: ConfirmedSwap[]) {
+  writeSwapStore({ swaps });
+  return readSwapStore();
+}
+
 export function removeConfirmedSwap(id: string): { store: SwapStoreData; removed?: ConfirmedSwap } {
   const store = readSwapStore();
   const removed = store.swaps.find((s) => s.id === id);

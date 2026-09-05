@@ -20,6 +20,7 @@ import {
   applyConfirmedSwaps,
   confirmedSwapFromSuggestion,
   confirmedSwapManual,
+  reviseConfirmedSwap,
   swapConflicts,
   type ConfirmedSwap,
 } from "./swap-records";
@@ -134,6 +135,25 @@ export function localSwapPost(data: ScheduleData, body: SwapBody) {
     const next = { swaps: [record, ...loadSwapStore().swaps].slice(0, 200) };
     saveSwapStore(next);
     return { ok: true, saved: record, swaps: next.swaps };
+  }
+
+  if (action === "update") {
+    const swapId = body.swapId;
+    if (!swapId) return fail("未指定要修改嘅紀錄");
+    if (!body.leaveTeacherId || !body.leaveDate || !body.leavePeriodId || !body.partnerDate || !body.partnerPeriodId) {
+      return fail("請填原課堂同調往日期／節次");
+    }
+    const revised = reviseConfirmedSwap(data, loadSwapStore().swaps, swapId, {
+      leaveTeacherId: body.leaveTeacherId,
+      leaveDate: body.leaveDate,
+      leavePeriodId: body.leavePeriodId,
+      partnerDate: body.partnerDate,
+      partnerPeriodId: body.partnerPeriodId,
+      partnerTeacherId: body.partnerTeacherId || undefined,
+    });
+    if ("error" in revised) return fail(revised.error);
+    saveSwapStore({ swaps: revised.swaps });
+    return { ok: true, saved: revised.saved, swaps: revised.swaps };
   }
 
   if (action === "undo") {
