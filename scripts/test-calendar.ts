@@ -158,8 +158,8 @@ const 乙 = teacher("乙", "乙老師");
   const data = schedule(
     [振, 乙],
     [
-      lesson("振-p5", "wed", "p5", "振"),
-      lesson("乙-p1", "tue", "p1", "乙"),
+      lesson("振-p5", "wed", "p5", "振", { roomId: "305" }),
+      lesson("乙-p1", "tue", "p1", "乙", { roomId: "201" }),
     ],
   );
   const plan = planTeacherLeaveSwaps(data, "振", ["2026-10-21"], "2026-10-21");

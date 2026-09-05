@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ArrowLeftRight, Check, Pencil, Plus, Repeat2, Trash2, X } from "lucide-react";
+import { LeaveKindPicker } from "@/components/leave-kind-picker";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
 import { useSchedule } from "@/components/schedule-provider";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +19,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { COVER_PERIOD_IDS, dayLabel, formatTimeRange, periodLabel } from "@/lib/constants";
-import { hkTodayIso, weekdayFromIsoDate } from "@/lib/cover";
+import {
+  hkTodayIso,
+  weekdayFromIsoDate,
+  type SavedCoverPlan,
+} from "@/lib/cover";
+import {
+  cycleLeaveKind,
+  DEFAULT_LEAVE_KIND,
+  leaveKindLabel,
+  type LeaveKind,
+} from "@/lib/leave";
 import { classNames, roomName } from "@/lib/queries";
 import {
   calendarLabelsOn,
@@ -26,9 +37,10 @@ import {
   swapBlockedReason,
 } from "@/lib/school-calendar";
 import { filterTeachers } from "@/lib/search";
-import type { SwapPlan, SwapUnitResult } from "@/lib/swap";
+import type { CoverSuggestion, SwapMatch, SwapPlan, SwapUnitResult } from "@/lib/swap";
 import { swapRecordKey, type ConfirmedSwap } from "@/lib/swap-records";
-import { swapRequest } from "@/lib/web-ops";
+import { swapModeLabel } from "@/lib/swap-rules";
+import { coverRequest, swapRequest } from "@/lib/web-ops";
 import { cn } from "@/lib/utils";
 
 export default function SwapPage() {
@@ -36,7 +48,7 @@ export default function SwapPage() {
     <PageBody>
       <PageHeader
         title="調堂安排"
-        description="老師事假／公假要調堂：可揀多日請假、指定由邊日開始搵調堂；IAL 選修會一拼調；調唔到會畀代堂建議。學校假期、統測、考試同深度學習周沒有正規課堂，不能調堂亦不能代堂。"
+        description="老師病假／事假／公假要調堂：可即時揀建議再轉入紀錄。公假不計算代堂 ±。CLP 可以調堂。同一科可兩堂一拼調，但調堂後同一班同一日同一科不能有 4 堂或以上（例如 4A 不能一日上四堂中文）。普通話／戲劇對拆可今個星期由另一位上全班、下星期由請假老師上番全班。調堂要課室無人用。可複合多名老師。重摘課不能調堂。"
       />
       <ScheduleGate>
         <SwapInner />
@@ -50,10 +62,13 @@ function SwapInner() {
   const [teacherId, setTeacherId] = useState("");
   const [q, setQ] = useState("");
   const [leaveDates, setLeaveDates] = useState<string[]>([]);
+  const [leaveKinds, setLeaveKinds] = useState<Record<string, LeaveKind>>({});
+  const [draftLeaveKind, setDraftLeaveKind] = useState<LeaveKind>(DEFAULT_LEAVE_KIND);
   const [leaveDraft, setLeaveDraft] = useState(hkTodayIso());
   const [swapFromDate, setSwapFromDate] = useState(hkTodayIso());
   const [plan, setPlan] = useState<SwapPlan | null>(null);
   const [swaps, setSwaps] = useState<ConfirmedSwap[]>([]);
+  const [coverPlans, setCoverPlans] = useState<SavedCoverPlan[]>([]);
   const [editing, setEditing] = useState<ConfirmedSwap | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -65,6 +80,13 @@ function SwapInner() {
       })
       .catch(() => {
         /* 未有紀錄 */
+      });
+    void coverRequest(null, undefined, "GET")
+      .then((json) => {
+        if (!cancelled) setCoverPlans((json as { plans?: SavedCoverPlan[] }).plans ?? []);
+      })
+      .catch(() => {
+        /* 未有代堂紀錄 */
       });
     return () => {
       cancelled = true;
@@ -95,6 +117,7 @@ function SwapInner() {
       if (blocked) toast.message(`${blocked}會改為代堂建議。`);
     }
     setLeaveDates((cur) => [...cur, leaveDraft].sort());
+    setLeaveKinds((cur) => ({ ...cur, [leaveDraft]: draftLeaveKind }));
     setPlan(null);
   };
 
@@ -104,7 +127,7 @@ function SwapInner() {
       return;
     }
     if (leaveDates.length === 0) {
-      toast.error("請加入至少一日事假／公假");
+      toast.error("請加入至少一日病假／事假／公假");
       return;
     }
     if (!weekdayFromIsoDate(swapFromDate)) {
@@ -130,8 +153,10 @@ function SwapInner() {
 
   const selectedTeacher = data.teachers.find((t) => t.id === teacherId);
 
-  const confirmSwap = async (result: SwapUnitResult) => {
-    if (!result.swap) return;
+  const leaveKindForDate = (date: string): LeaveKind =>
+    leaveKinds[date] ?? draftLeaveKind;
+
+  const confirmSwap = async (result: SwapUnitResult, swap: SwapMatch) => {
     setBusy(true);
     try {
       const json = (await swapRequest(data, {
@@ -140,15 +165,43 @@ function SwapInner() {
         leaveDate: result.unit.leaveDate,
         leavePeriodId: result.unit.periodId,
         leaveLessonIds: result.unit.lessons.map((l) => l.id),
-        partnerDate: result.swap.partnerDate,
-        partnerPeriodId: result.swap.partnerPeriodId,
-        partnerLessonIds: result.swap.partnerLessons.map((l) => l.id),
-        reason: result.swap.reason,
+        partnerDate: swap.partnerDate,
+        partnerPeriodId: swap.partnerPeriodId,
+        partnerLessonIds: swap.partnerLessons.map((l) => l.id),
+        reason: swap.reason,
+        leaveKind: leaveKindForDate(result.unit.leaveDate),
+        mode: swap.mode,
+        periodPairs: swap.periodPairs,
       })) as { swaps?: ConfirmedSwap[] };
       setSwaps(json.swaps ?? []);
-      toast.success("已確認調堂；之後代堂會跟呢份安排");
+      toast.success("已轉入調堂紀錄；之後代堂會跟呢份安排");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "確認失敗");
+      toast.error(e instanceof Error ? e.message : "轉入失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const recordCover = async (result: SwapUnitResult, cover: CoverSuggestion) => {
+    setBusy(true);
+    try {
+      const kind = leaveKindForDate(result.unit.leaveDate);
+      const json = (await coverRequest(data, {
+        action: "recordSlot",
+        date: result.unit.leaveDate,
+        absenteeId: teacherId,
+        periodId: result.unit.periodId,
+        coverTeacherId: cover.teacherId,
+        leaveKind: kind,
+      })) as { plans?: SavedCoverPlan[] };
+      setCoverPlans(json.plans ?? []);
+      toast.success(
+        kind === "official"
+          ? `已轉入代堂紀錄（${leaveKindLabel(kind)}不計 ±）`
+          : `已轉入代堂紀錄（${leaveKindLabel(kind)}）`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "轉入代堂失敗");
     } finally {
       setBusy(false);
     }
@@ -174,10 +227,9 @@ function SwapInner() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>工作項目：老師事假／公假要調堂安排</CardTitle>
+          <CardTitle>工作項目：老師病假／事假／公假要調堂安排</CardTitle>
           <CardDescription>
-            1）揀請假日期（可多日）　2）揀由邊日開始搵調堂　3）調唔到會畀代堂建議　4）高中選修並行時段唔可單獨調　5）IAL
-            同一時段一拼調
+            1）揀請假種類同日期　2）即時揀建議轉入紀錄　3）CLP 可以調堂　4）同一科兩堂可一拼，但調堂後同一班當日同一科不能 4 堂或以上　5）普通話／戲劇對拆可輪換全班　6）課室同一時間只能一班　7）可複合多名老師　8）重摘課不能調堂
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -236,7 +288,11 @@ function SwapInner() {
           </div>
 
           <div className="grid gap-2">
-            <span className="text-sm text-muted-foreground">事假／公假日期（可多日）</span>
+            <span className="text-sm text-muted-foreground">請假種類同日期（可多日）</span>
+            <LeaveKindPicker value={draftLeaveKind} onChange={setDraftLeaveKind} />
+            <p className="text-xs text-muted-foreground">
+              公假仍可調堂／代堂，但入帳時不計算請假人 −1、代堂人 +1。
+            </p>
             <div className="flex flex-wrap items-end gap-2">
               <Input
                 type="date"
@@ -256,8 +312,21 @@ function SwapInner() {
                 leaveDates.map((d) => {
                   const day = weekdayFromIsoDate(d);
                   const labels = calendarLabelsOn(d);
+                  const kind = leaveKinds[d] ?? DEFAULT_LEAVE_KIND;
                   return (
                     <Badge key={d} variant="secondary" className="gap-1 pr-1">
+                      <button
+                        type="button"
+                        className="rounded px-0.5 hover:bg-black/10"
+                        onClick={() => {
+                          setLeaveKinds((cur) => ({ ...cur, [d]: cycleLeaveKind(kind) }));
+                          setPlan(null);
+                        }}
+                        title="撳一下轉請假種類"
+                      >
+                        {leaveKindLabel(kind)}
+                        {kind === "official" ? "·不計±" : ""}
+                      </button>
                       {d}
                       {day ? ` ${dayLabel(day)}` : ""}
                       {labels.length ? ` · ${labels.join("、")}` : ""}
@@ -266,6 +335,11 @@ function SwapInner() {
                         className="rounded p-0.5 hover:bg-black/10"
                         onClick={() => {
                           setLeaveDates((cur) => cur.filter((x) => x !== d));
+                          setLeaveKinds((cur) => {
+                            const next = { ...cur };
+                            delete next[d];
+                            return next;
+                          });
                           setPlan(null);
                         }}
                         aria-label={`移除 ${d}`}
@@ -320,10 +394,19 @@ function SwapInner() {
                 className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
               >
                 <span>
-                  {s.leaveTeacherName} {s.leaveDate} {periodLabel(s.leavePeriodId)}
+                  {s.leaveKind ? `${leaveKindLabel(s.leaveKind)} · ` : ""}
+                  {swapModeLabel(s.mode) ? `${swapModeLabel(s.mode)} · ` : ""}
+                  {s.partnerTeacherIds.length > 1 && s.mode !== "subject_pair" ? "複合 · " : ""}
+                  {s.leaveTeacherName} {s.leaveDate}{" "}
+                  {s.periodPairs?.length
+                    ? s.periodPairs.map((p) => periodLabel(p.leavePeriodId)).join("＋")
+                    : periodLabel(s.leavePeriodId)}
                   {s.leaveSubjects.length ? ` ${s.leaveSubjects.join("、")}` : ""}
                   {" → "}
-                  {s.partnerDate} {periodLabel(s.partnerPeriodId)}
+                  {s.partnerDate}{" "}
+                  {s.periodPairs?.length
+                    ? s.periodPairs.map((p) => periodLabel(p.partnerPeriodId)).join("＋")
+                    : periodLabel(s.partnerPeriodId)}
                   {s.partnerTeacherNames.length ? `（${s.partnerTeacherNames.join("、")}）` : "（空堂／CLP）"}
                 </span>
                 <div className="flex gap-2">
@@ -380,6 +463,7 @@ function SwapInner() {
               <ResultCard
                 key={r.unit.id}
                 result={r}
+                leaveKind={leaveKindForDate(r.unit.leaveDate)}
                 confirmed={confirmedKeys.has(
                   swapRecordKey({
                     leaveTeacherId: teacherId,
@@ -387,8 +471,16 @@ function SwapInner() {
                     leavePeriodId: r.unit.periodId,
                   }),
                 )}
+                recordedCover={coverPlans.some(
+                  (p) =>
+                    p.date === r.unit.leaveDate &&
+                    p.assignments.some(
+                      (a) => a.absenteeId === teacherId && a.periodId === r.unit.periodId,
+                    ),
+                )}
                 busy={busy}
-                onConfirm={() => void confirmSwap(r)}
+                onConfirmSwap={(swap) => void confirmSwap(r, swap)}
+                onRecordCover={(cover) => void recordCover(r, cover)}
               />
             ))
           )}
@@ -406,17 +498,29 @@ function statusBadge(status: SwapUnitResult["status"]) {
 
 function ResultCard({
   result,
+  leaveKind,
   confirmed,
+  recordedCover,
   busy,
-  onConfirm,
+  onConfirmSwap,
+  onRecordCover,
 }: {
   result: SwapUnitResult;
+  leaveKind: LeaveKind;
   confirmed?: boolean;
+  recordedCover?: boolean;
   busy?: boolean;
-  onConfirm?: () => void;
+  onConfirmSwap?: (swap: SwapMatch) => void;
+  onRecordCover?: (cover: CoverSuggestion) => void;
 }) {
   const { data } = useSchedule();
-  const { unit, status, swap, coverSuggestions, blockers } = result;
+  const { unit, status, coverSuggestions, blockers } = result;
+  const swapOptions = result.swaps?.length ? result.swaps : result.swap ? [result.swap] : [];
+  const [swapIdx, setSwapIdx] = useState(0);
+  const [coverId, setCoverId] = useState(coverSuggestions[0]?.teacherId ?? "");
+  const selectedSwap = swapOptions[Math.min(swapIdx, Math.max(swapOptions.length - 1, 0))];
+  const selectedCover =
+    coverSuggestions.find((c) => c.teacherId === coverId) ?? coverSuggestions[0];
   if (!data) return null;
 
   return (
@@ -430,8 +534,14 @@ function ResultCard({
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-center gap-2">
           {statusBadge(status)}
+          <Badge variant="outline">
+            {leaveKindLabel(leaveKind)}
+            {leaveKind === "official" ? " · 不計±" : ""}
+          </Badge>
           {unit.kind === "ial_bundle" ? <Badge variant="outline">IAL 一拼</Badge> : null}
           {unit.kind === "elective_blocked" ? <Badge variant="outline">選修並行</Badge> : null}
+          {unit.kind === "remedial_blocked" ? <Badge variant="outline">重摘課</Badge> : null}
+          {unit.kind === "subject_pair" ? <Badge variant="outline">同一科兩堂</Badge> : null}
           <CardTitle className="text-base">{unit.label}</CardTitle>
         </div>
         <CardDescription>
@@ -465,22 +575,53 @@ function ResultCard({
           </table>
         </div>
 
-        {swap ? (
+        {swapOptions.length > 0 ? (
           <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 dark:bg-emerald-950/20">
-            <p className="font-medium text-emerald-900 dark:text-emerald-100">{swap.reason}</p>
-            <p className="mt-1 text-muted-foreground">
-              對調至 {swap.partnerDate} {dayLabel(swap.partnerDay)} {periodLabel(swap.partnerPeriodId)}
-              （{formatTimeRange(swap.partnerDay, swap.partnerPeriodId)}）· 對手：
-              {swap.partnerTeacherNames.join("、") || "空堂／CLP"} · {swap.partnerSubjects.join("、")}
+            <p className="font-medium text-emerald-900 dark:text-emerald-100">
+              {swapOptions.length > 1 ? `調堂建議（${swapOptions.length} 個，即時揀一個轉入紀錄）` : "調堂建議"}
             </p>
-            {onConfirm ? (
+            <div className="mt-2 space-y-2">
+              {swapOptions.map((opt, i) => (
+                <label
+                  key={`${opt.partnerDate}|${opt.partnerPeriodId}|${opt.partnerTeacherIds.join(",")}`}
+                  className={cn(
+                    "flex cursor-pointer items-start gap-2 rounded-md border bg-background/70 px-2 py-2",
+                    i === swapIdx && "border-emerald-600 ring-1 ring-emerald-600/40",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    className="mt-1"
+                    name={`swap-${unit.id}`}
+                    checked={i === swapIdx}
+                    onChange={() => setSwapIdx(i)}
+                  />
+                  <span>
+                    <span className="block font-medium">
+                      {swapModeLabel(opt.mode) ? `${swapModeLabel(opt.mode)} · ` : ""}
+                      {opt.mode === "period" && opt.partnerTeacherIds.length > 1 ? "複合 · " : ""}
+                      {opt.reason}
+                    </span>
+                    <span className="block text-muted-foreground">
+                      對調至 {opt.partnerDate} {dayLabel(opt.partnerDay)}{" "}
+                      {opt.periodPairs?.length
+                        ? opt.periodPairs.map((p) => periodLabel(p.partnerPeriodId)).join("＋")
+                        : periodLabel(opt.partnerPeriodId)}
+                      （{formatTimeRange(opt.partnerDay, opt.partnerPeriodId)}）· 對手：
+                      {opt.partnerTeacherNames.join("、") || "空堂／CLP"} · {opt.partnerSubjects.join("、")}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {onConfirmSwap && selectedSwap ? (
               <div className="mt-2">
                 {confirmed ? (
-                  <Badge className="bg-emerald-700 hover:bg-emerald-700">已確認入帳</Badge>
+                  <Badge className="bg-emerald-700 hover:bg-emerald-700">已轉入調堂紀錄</Badge>
                 ) : (
-                  <Button size="sm" disabled={busy} onClick={onConfirm}>
+                  <Button size="sm" disabled={busy} onClick={() => onConfirmSwap(selectedSwap)}>
                     <Check />
-                    確認調堂
+                    轉入紀錄
                   </Button>
                 )}
               </div>
@@ -498,20 +639,45 @@ function ResultCard({
 
         {coverSuggestions.length > 0 ? (
           <div>
-            <p className="mb-2 font-medium">代堂建議（該節空閒老師）</p>
-            <div className="flex flex-wrap gap-2">
+            <p className="mb-2 font-medium">代堂建議（該節空閒老師，可即時揀再轉入紀錄）</p>
+            <div className="space-y-2">
               {coverSuggestions.map((c) => (
-                <Badge key={c.teacherId} variant="outline" className="font-normal">
-                  {c.teacherName}（{c.teacherCode}）
-                  {c.sameSubject ? " · 同科" : ""}
-                  {c.teachesClass ? " · 任教該班" : ""}
-                  · 當日 {c.lessonsToday} 堂
-                </Badge>
+                <label
+                  key={c.teacherId}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2 rounded-md border px-2 py-2",
+                    selectedCover?.teacherId === c.teacherId && "border-foreground ring-1 ring-foreground/20",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    className="mt-0.5"
+                    name={`cover-${unit.id}`}
+                    checked={selectedCover?.teacherId === c.teacherId}
+                    onChange={() => setCoverId(c.teacherId)}
+                  />
+                  <span>
+                    {c.teacherName}（{c.teacherCode}）
+                    {c.sameSubject ? " · 同科" : ""}
+                    {c.teachesClass ? " · 任教該班" : ""}
+                    · 當日 {c.lessonsToday} 堂
+                  </span>
+                </label>
               ))}
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              正式入帳結餘請到「代堂」頁勾選請假同事產生方案。已確認調堂會改嗰日邊個得閒。
-            </p>
+            {onRecordCover && selectedCover && !confirmed ? (
+              <div className="mt-2">
+                {recordedCover ? (
+                  <Badge variant="secondary">已轉入代堂紀錄</Badge>
+                ) : (
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => onRecordCover(selectedCover)}>
+                    <Check />
+                    轉入紀錄
+                    {leaveKind === "official" ? "（公假不計±）" : ""}
+                  </Button>
+                )}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </CardContent>
@@ -541,6 +707,7 @@ function ManualSwapForm({
   const [partnerPeriodId, setPartnerPeriodId] = useState("p3");
   const [partnerQ, setPartnerQ] = useState("");
   const [partnerTeacherId, setPartnerTeacherId] = useState("");
+  const [leaveKind, setLeaveKind] = useState<LeaveKind>(DEFAULT_LEAVE_KIND);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -550,6 +717,7 @@ function ManualSwapForm({
     setPartnerDate(editing.partnerDate);
     setPartnerPeriodId(editing.partnerPeriodId);
     setPartnerTeacherId(editing.partnerTeacherIds[0] ?? "");
+    setLeaveKind(editing.leaveKind ?? DEFAULT_LEAVE_KIND);
     setPartnerQ("");
   }, [editing]);
 
@@ -576,6 +744,7 @@ function ManualSwapForm({
         partnerDate,
         partnerPeriodId,
         partnerTeacherId: partnerTeacherId || undefined,
+        leaveKind,
       })) as { swaps?: ConfirmedSwap[] };
       onSaved(json.swaps ?? []);
       toast.success(editing ? "已修改調堂紀錄" : "已人手加入調堂紀錄");
@@ -593,7 +762,7 @@ function ManualSwapForm({
         <CardDescription>
           {editing
             ? `正在改 ${editing.leaveTeacherName} ${editing.leaveDate} ${periodLabel(editing.leavePeriodId)}。儲存後代堂會跟新安排。`
-            : "例如將課堂調去原本空堂／CLP。對手老師可留空（只搬去該節）。已確認紀錄可人手修改或刪除。"}
+            : "例如將課堂調去原本空堂／CLP。對手老師可留空（只搬去該節）。重摘課不能調堂。已確認紀錄可人手修改或刪除。"}
           {" "}
           學校假期、統測、考試同深度學習周沒有正規課堂，不能加入或改去嗰啲日子。
         </CardDescription>
@@ -674,6 +843,10 @@ function ManualSwapForm({
                 ))}
               </SelectContent>
             </Select>
+          </label>
+          <label className="grid gap-1 text-sm">
+            <span className="text-muted-foreground">請假種類</span>
+            <LeaveKindPicker value={leaveKind} onChange={setLeaveKind} />
           </label>
         </div>
         <div className="flex flex-wrap gap-2">
