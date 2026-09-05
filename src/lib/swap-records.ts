@@ -1,7 +1,13 @@
 import { addDaysIso, weekdayFromIsoDate } from "./cover";
 import type { LeaveKind } from "./leave";
-import { isRemedialLesson, isTeachingLesson } from "./lesson-kind";
+import { isClpSubject, isRemedialLesson, isTeachingLesson } from "./lesson-kind";
 import { isSwapAllowedDate, swapBlockedReason, swapPairError } from "./school-calendar";
+import {
+  exceedsSameSubjectSwapLimit,
+  roomsFreeForMove,
+  type SwapMode,
+  type SwapPeriodPair,
+} from "./swap-rules";
 import type { DayId, Lesson, ScheduleData } from "./types";
 
 export type ConfirmedSwap = {
@@ -25,6 +31,8 @@ export type ConfirmedSwap = {
   partnerClassIds: string[];
   reason: string;
   leaveKind?: LeaveKind;
+  mode?: SwapMode;
+  periodPairs?: SwapPeriodPair[];
 };
 
 export type SwapStoreData = {
@@ -130,6 +138,8 @@ export function confirmedSwapFromSuggestion(
   partnerLessons: Lesson[],
   reason: string,
   leaveKind?: LeaveKind,
+  mode?: SwapMode,
+  periodPairs?: SwapPeriodPair[],
 ): ConfirmedSwap | { error: string } {
   const leaveDay = weekdayFromIsoDate(leaveDate);
   const partnerWeekday = weekdayFromIsoDate(partnerDate);
@@ -144,8 +154,34 @@ export function confirmedSwapFromSuggestion(
   if (leaveDate === partnerDate && leavePeriodId === partnerPeriodId) {
     return { error: "調往節次唔可以同原節次一樣" };
   }
-  if (leaveLessons.some(isRemedialLesson) || partnerLessons.some(isRemedialLesson)) {
+  if (leaveLessons.some(isRemedialLesson) || partnerLessons.filter((l) => !isClpSubject(l.subject)).some(isRemedialLesson)) {
     return { error: "重摘課不能調堂" };
+  }
+  const resolvedMode: SwapMode =
+    mode ??
+    (partnerLessons.length > 0 && partnerLessons.every((l) => isClpSubject(l.subject))
+      ? "clp"
+      : "period");
+  if (resolvedMode !== "split_rotate") {
+    const ignore = new Set([...leaveLessons, ...partnerLessons].map((l) => l.id));
+    const pairs = periodPairs?.length
+      ? periodPairs
+      : [{ leavePeriodId, partnerPeriodId }];
+    for (const pair of pairs) {
+      const movingLeave = leaveLessons.filter((l) => !periodPairs?.length || l.periodId === pair.leavePeriodId);
+      const movingPartner = partnerLessons.filter(
+        (l) => !isClpSubject(l.subject) && (!periodPairs?.length || l.periodId === pair.partnerPeriodId),
+      );
+      if (!roomsFreeForMove(data, movingLeave, partnerDay, pair.partnerPeriodId, ignore)) {
+        return { error: "調往節次課室已被佔用" };
+      }
+      if (!roomsFreeForMove(data, movingPartner, leaveDay, pair.leavePeriodId, ignore)) {
+        return { error: "原節次課室已被佔用" };
+      }
+    }
+    if (exceedsSameSubjectSwapLimit(leaveLessons) || (periodPairs?.length ?? 0) > 2) {
+      return { error: "同一科不能一次過調 4 堂或以上" };
+    }
   }
   const leaveTeacher = data.teachers.find((t) => t.id === leaveTeacherId);
   const partnerTeacherIds = [...new Set(partnerLessons.flatMap((l) => l.teacherIds))];
@@ -168,6 +204,8 @@ export function confirmedSwapFromSuggestion(
     partnerClassIds: [...new Set(partnerLessons.flatMap((l) => l.classIds))],
     reason,
     leaveKind,
+    mode: resolvedMode,
+    periodPairs,
   });
 }
 
@@ -273,12 +311,28 @@ export function applyConfirmedSwaps(
   const added: Lesson[] = [];
 
   for (const s of swaps) {
+    if (s.mode === "split_rotate") {
+      if (s.leaveDate === date) {
+        for (const id of s.leaveLessonIds) removeIds.add(id);
+      }
+      if (s.partnerDate === date) {
+        for (const id of s.partnerLessonIds) removeIds.add(id);
+      }
+      continue;
+    }
+
+    const pairs = s.periodPairs?.length
+      ? s.periodPairs
+      : [{ leavePeriodId: s.leavePeriodId, partnerPeriodId: s.partnerPeriodId }];
+
     if (s.leaveDate === date) {
       for (const id of s.leaveLessonIds) removeIds.add(id);
       for (const id of s.partnerLessonIds) {
         const orig = data.lessons.find((l) => l.id === id);
         if (!orig || !isTeachingLesson(orig)) continue;
-        added.push(relocateLesson(orig, s.id, "to-leave", day, s.leavePeriodId));
+        const pair =
+          pairs.find((p) => p.partnerPeriodId === orig.periodId) ?? pairs[0]!;
+        added.push(relocateLesson(orig, s.id, "to-leave", day, pair.leavePeriodId));
       }
     }
     if (s.partnerDate === date) {
@@ -286,7 +340,8 @@ export function applyConfirmedSwaps(
       for (const id of s.leaveLessonIds) {
         const orig = data.lessons.find((l) => l.id === id);
         if (!orig || !isTeachingLesson(orig)) continue;
-        added.push(relocateLesson(orig, s.id, "to-partner", day, s.partnerPeriodId));
+        const pair = pairs.find((p) => p.leavePeriodId === orig.periodId) ?? pairs[0]!;
+        added.push(relocateLesson(orig, s.id, "to-partner", day, pair.partnerPeriodId));
       }
     }
   }

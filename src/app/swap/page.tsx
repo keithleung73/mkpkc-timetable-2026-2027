@@ -39,6 +39,7 @@ import {
 import { filterTeachers } from "@/lib/search";
 import type { CoverSuggestion, SwapMatch, SwapPlan, SwapUnitResult } from "@/lib/swap";
 import { swapRecordKey, type ConfirmedSwap } from "@/lib/swap-records";
+import { swapModeLabel } from "@/lib/swap-rules";
 import { coverRequest, swapRequest } from "@/lib/web-ops";
 import { cn } from "@/lib/utils";
 
@@ -47,7 +48,7 @@ export default function SwapPage() {
     <PageBody>
       <PageHeader
         title="調堂安排"
-        description="老師病假／事假／公假要調堂：可即時揀建議再轉入紀錄。公假不計算代堂 ±。重摘課不能調堂。IAL 選修會一拼調；調唔到可揀代堂建議入帳。學校假期、統測、考試同深度學習周沒有正規課堂，不能調堂亦不能代堂。"
+        description="老師病假／事假／公假要調堂：可即時揀建議再轉入紀錄。公假不計算代堂 ±。CLP 可以調堂。同一科可兩堂一拼調，但不能一次過調 4 堂或以上。普通話／戲劇對拆可今個星期由另一位上全班、下星期由請假老師上番全班。調堂要課室無人用。可複合多名老師。重摘課不能調堂。"
       />
       <ScheduleGate>
         <SwapInner />
@@ -169,6 +170,8 @@ function SwapInner() {
         partnerLessonIds: swap.partnerLessons.map((l) => l.id),
         reason: swap.reason,
         leaveKind: leaveKindForDate(result.unit.leaveDate),
+        mode: swap.mode,
+        periodPairs: swap.periodPairs,
       })) as { swaps?: ConfirmedSwap[] };
       setSwaps(json.swaps ?? []);
       toast.success("已轉入調堂紀錄；之後代堂會跟呢份安排");
@@ -226,8 +229,7 @@ function SwapInner() {
         <CardHeader>
           <CardTitle>工作項目：老師病假／事假／公假要調堂安排</CardTitle>
           <CardDescription>
-            1）揀請假種類同日期（可多日）　2）揀由邊日開始搵調堂　3）即時揀建議再轉入紀錄　4）公假不計算代堂 ±　5）重摘課不能調堂　6）高中選修並行時段唔可單獨調　7）IAL
-            同一時段一拼調
+            1）揀請假種類同日期　2）即時揀建議轉入紀錄　3）CLP 可以調堂　4）同一科兩堂可一拼，但不能一次過調 4 堂或以上　5）普通話／戲劇對拆可輪換全班　6）課室同一時間只能一班　7）可複合多名老師　8）重摘課不能調堂
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -393,10 +395,18 @@ function SwapInner() {
               >
                 <span>
                   {s.leaveKind ? `${leaveKindLabel(s.leaveKind)} · ` : ""}
-                  {s.leaveTeacherName} {s.leaveDate} {periodLabel(s.leavePeriodId)}
+                  {swapModeLabel(s.mode) ? `${swapModeLabel(s.mode)} · ` : ""}
+                  {s.partnerTeacherIds.length > 1 && s.mode !== "subject_pair" ? "複合 · " : ""}
+                  {s.leaveTeacherName} {s.leaveDate}{" "}
+                  {s.periodPairs?.length
+                    ? s.periodPairs.map((p) => periodLabel(p.leavePeriodId)).join("＋")
+                    : periodLabel(s.leavePeriodId)}
                   {s.leaveSubjects.length ? ` ${s.leaveSubjects.join("、")}` : ""}
                   {" → "}
-                  {s.partnerDate} {periodLabel(s.partnerPeriodId)}
+                  {s.partnerDate}{" "}
+                  {s.periodPairs?.length
+                    ? s.periodPairs.map((p) => periodLabel(p.partnerPeriodId)).join("＋")
+                    : periodLabel(s.partnerPeriodId)}
                   {s.partnerTeacherNames.length ? `（${s.partnerTeacherNames.join("、")}）` : "（空堂／CLP）"}
                 </span>
                 <div className="flex gap-2">
@@ -531,6 +541,7 @@ function ResultCard({
           {unit.kind === "ial_bundle" ? <Badge variant="outline">IAL 一拼</Badge> : null}
           {unit.kind === "elective_blocked" ? <Badge variant="outline">選修並行</Badge> : null}
           {unit.kind === "remedial_blocked" ? <Badge variant="outline">重摘課</Badge> : null}
+          {unit.kind === "subject_pair" ? <Badge variant="outline">同一科兩堂</Badge> : null}
           <CardTitle className="text-base">{unit.label}</CardTitle>
         </div>
         <CardDescription>
@@ -586,9 +597,16 @@ function ResultCard({
                     onChange={() => setSwapIdx(i)}
                   />
                   <span>
-                    <span className="block font-medium">{opt.reason}</span>
+                    <span className="block font-medium">
+                      {swapModeLabel(opt.mode) ? `${swapModeLabel(opt.mode)} · ` : ""}
+                      {opt.mode === "period" && opt.partnerTeacherIds.length > 1 ? "複合 · " : ""}
+                      {opt.reason}
+                    </span>
                     <span className="block text-muted-foreground">
-                      對調至 {opt.partnerDate} {dayLabel(opt.partnerDay)} {periodLabel(opt.partnerPeriodId)}
+                      對調至 {opt.partnerDate} {dayLabel(opt.partnerDay)}{" "}
+                      {opt.periodPairs?.length
+                        ? opt.periodPairs.map((p) => periodLabel(p.partnerPeriodId)).join("＋")
+                        : periodLabel(opt.partnerPeriodId)}
                       （{formatTimeRange(opt.partnerDay, opt.partnerPeriodId)}）· 對手：
                       {opt.partnerTeacherNames.join("、") || "空堂／CLP"} · {opt.partnerSubjects.join("、")}
                     </span>

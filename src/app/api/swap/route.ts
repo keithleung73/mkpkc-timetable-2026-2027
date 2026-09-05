@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { weekdayFromIsoDate } from "@/lib/cover";
 import type { LeaveKind } from "@/lib/leave";
+import type { SwapMode, SwapPeriodPair } from "@/lib/swap-rules";
 import { readSchedule } from "@/lib/store";
 import { planTeacherLeaveSwaps } from "@/lib/swap";
 import {
@@ -34,6 +35,8 @@ type Body = {
   partnerDay?: string;
   reason?: string;
   leaveKind?: LeaveKind;
+  mode?: SwapMode;
+  periodPairs?: SwapPeriodPair[];
 };
 
 export async function POST(req: Request) {
@@ -92,6 +95,8 @@ export async function POST(req: Request) {
         partnerLessons,
         body.reason ?? "確認調堂",
         body.leaveKind,
+        body.mode,
+        body.periodPairs,
       );
     }
     if (!record) return NextResponse.json({ error: "未有調堂紀錄" }, { status: 400 });

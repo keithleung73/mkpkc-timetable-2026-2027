@@ -26,6 +26,7 @@ import {
   swapConflicts,
   type ConfirmedSwap,
 } from "./swap-records";
+import type { SwapMode, SwapPeriodPair } from "./swap-rules";
 import type { ScheduleData } from "./types";
 
 export type SwapBody = {
@@ -46,6 +47,8 @@ export type SwapBody = {
   partnerDay?: string;
   reason?: string;
   leaveKind?: LeaveKind;
+  mode?: SwapMode;
+  periodPairs?: SwapPeriodPair[];
 };
 
 export type CoverBody = {
@@ -114,6 +117,8 @@ export function localSwapPost(data: ScheduleData, body: SwapBody) {
         partnerLessons,
         body.reason ?? "確認調堂",
         body.leaveKind,
+        body.mode,
+        body.periodPairs,
       );
     }
     if (!record) return fail("未有調堂紀錄");
