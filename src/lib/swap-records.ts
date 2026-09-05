@@ -1,6 +1,6 @@
 import { addDaysIso, weekdayFromIsoDate } from "./cover";
 import type { LeaveKind } from "./leave";
-import { isTeachingLesson } from "./lesson-kind";
+import { isRemedialLesson, isTeachingLesson } from "./lesson-kind";
 import { isSwapAllowedDate, swapBlockedReason, swapPairError } from "./school-calendar";
 import type { DayId, Lesson, ScheduleData } from "./types";
 
@@ -143,6 +143,9 @@ export function confirmedSwapFromSuggestion(
   if (partnerBlock) return { error: partnerBlock };
   if (leaveDate === partnerDate && leavePeriodId === partnerPeriodId) {
     return { error: "調往節次唔可以同原節次一樣" };
+  }
+  if (leaveLessons.some(isRemedialLesson) || partnerLessons.some(isRemedialLesson)) {
+    return { error: "重摘課不能調堂" };
   }
   const leaveTeacher = data.teachers.find((t) => t.id === leaveTeacherId);
   const partnerTeacherIds = [...new Set(partnerLessons.flatMap((l) => l.teacherIds))];

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { eligibleCoverTeachers, generateCoverPlan, isOccupied, teachingLessonsOnDay } from "../src/lib/cover";
 import { isFree } from "../src/lib/queries";
-import { isNonRegularLesson, lessonOccupiesTeacher } from "../src/lib/lesson-kind";
+import { isNonRegularLesson, isRemedialLesson, lessonOccupiesTeacher } from "../src/lib/lesson-kind";
 import { planTeacherLeaveSwaps } from "../src/lib/swap";
 import {
   applyConfirmedSwaps,
@@ -233,6 +233,49 @@ const 乙 = teacher("乙", "乙老師");
   assert.ok((hit?.swaps?.length ?? 0) >= 2, "應列出多於一個可即時揀嘅調堂建議");
   const periods = new Set(hit?.swaps?.map((s) => s.partnerPeriodId));
   assert.ok(periods.has("p1") && periods.has("p3"));
+}
+
+{
+  const rem = lesson("乙-rem", "thu", "p9", "乙", { classIds: ["2D"], subject: "重摘課" });
+  assert.equal(isRemedialLesson(rem), true);
+  const data = schedule(
+    [振, 乙],
+    [lesson("振-2d", "wed", "p5", "振", { classIds: ["2D"], subject: "數學" }), rem],
+  );
+  const plan = planTeacherLeaveSwaps(data, "振", ["2026-09-02"], "2026-09-02");
+  const hit = plan.results.find((r) => r.unit.periodId === "p5");
+  assert.ok(!(hit?.swaps ?? []).some((s) => s.partnerSubjects.includes("重摘課")));
+  assert.notEqual(hit?.swap?.partnerPeriodId, "p9", "重摘課不能做調堂對手");
+
+  const leaveRemedial = planTeacherLeaveSwaps(data, "乙", ["2026-09-03"], "2026-09-03");
+  const remUnit = leaveRemedial.results.find((r) => r.unit.periodId === "p9");
+  assert.equal(remUnit?.status, "blocked");
+  assert.equal(remUnit?.unit.kind, "remedial_blocked");
+  assert.ok(remUnit?.blockers.some((b) => b.includes("重摘課")));
+
+  const manual = confirmedSwapManual(data, {
+    leaveTeacherId: "振",
+    leaveDate: "2026-09-02",
+    leavePeriodId: "p5",
+    partnerDate: "2026-09-03",
+    partnerPeriodId: "p9",
+    partnerTeacherId: "乙",
+  });
+  assert.ok("error" in manual, "人手對調重摘課應失敗");
+  if ("error" in manual) assert.match(manual.error, /重摘課/);
+}
+
+{
+  const live = JSON.parse(readFileSync("data/schedule.json", "utf8")) as ScheduleData;
+  const plan = planTeacherLeaveSwaps(live, "振", ["2026-09-03"], "2026-09-03");
+  for (const r of plan.results) {
+    for (const s of r.swaps ?? (r.swap ? [r.swap] : [])) {
+      assert.ok(
+        !s.partnerSubjects.some((sub) => sub.includes("重摘課")),
+        `正式課表不應建議對調重摘課：${r.unit.label} → ${s.partnerSubjects.join("、")}`,
+      );
+    }
+  }
 }
 
 {

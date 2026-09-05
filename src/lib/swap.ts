@@ -4,7 +4,7 @@ import {
   periodLabel as periodLabelFromConstants,
 } from "./constants";
 import { weekdayFromIsoDate } from "./cover";
-import { isTeachingLesson, lessonOccupiesTeacher } from "./lesson-kind";
+import { isRemedialLesson, isTeachingLesson, lessonOccupiesTeacher } from "./lesson-kind";
 import { classTokenMatches, substituteCandidates } from "./queries";
 import { schoolClosedReason, swapBlockedReason } from "./school-calendar";
 import { swapSearchDates } from "./swap-records";
@@ -12,7 +12,7 @@ import type { DayId, Lesson, ScheduleData } from "./types";
 
 export { isCoreSubject };
 
-export type SwapUnitKind = "normal" | "ial_bundle" | "elective_blocked";
+export type SwapUnitKind = "normal" | "ial_bundle" | "elective_blocked" | "remedial_blocked";
 
 export type SwapUnit = {
   id: string;
@@ -213,6 +213,16 @@ export function buildLeaveUnits(
     );
 
     for (const lesson of mine) {
+      if (isRemedialLesson(lesson)) {
+        const key = `remedial|${lesson.id}|${leaveDate}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        units.push(
+          unitFromLessons(data, leaveDate, day, lesson.periodId, [lesson], "remedial_blocked"),
+        );
+        continue;
+      }
+
       if (lessonHasIal(lesson)) {
         const bundle = ialBlockLessons(data, lesson);
         const key = `ial|${leaveDate}|${lesson.day}|${lesson.periodId}|${bundle
@@ -320,7 +330,9 @@ function findNormalSwaps(
       );
       if (partners.length !== 1) continue;
       const partner = partners[0]!;
-      if (isBlockedElective(data, partner) || lessonHasIal(partner)) continue;
+      if (isBlockedElective(data, partner) || lessonHasIal(partner) || isRemedialLesson(partner)) {
+        continue;
+      }
 
       const ignorePartner = new Set([partner.id]);
       if (
@@ -378,6 +390,7 @@ function findIalBundleSwaps(
         lessonHasIal,
       );
       if (partnerBundle.length < 1) continue;
+      if (partnerBundle.some(isRemedialLesson)) continue;
       if (partnerBundle.every((l) => ignoreLeaveOnPartnerDay.has(l.id))) continue;
 
       const partnerTeachers = [...new Set(partnerBundle.flatMap((l) => l.teacherIds))];
@@ -503,6 +516,15 @@ export function planTeacherLeaveSwaps(
         blockers: [
           "高中選修／分組時段：同一班同一時段仍有其他課（例如中史、歷史、企會財、化學等並行），不能單獨調堂。",
         ],
+      };
+    }
+
+    if (unit.kind === "remedial_blocked") {
+      return {
+        unit,
+        status: "blocked" as const,
+        coverSuggestions: coverForUnit(data, unit, teacherId),
+        blockers: ["重摘課不能調堂。"],
       };
     }
 

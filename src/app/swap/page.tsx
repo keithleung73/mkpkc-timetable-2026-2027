@@ -47,7 +47,7 @@ export default function SwapPage() {
     <PageBody>
       <PageHeader
         title="調堂安排"
-        description="老師病假／事假／公假要調堂：可即時揀建議再轉入紀錄。公假不計算代堂 ±。IAL 選修會一拼調；調唔到可揀代堂建議入帳。學校假期、統測、考試同深度學習周沒有正規課堂，不能調堂亦不能代堂。"
+        description="老師病假／事假／公假要調堂：可即時揀建議再轉入紀錄。公假不計算代堂 ±。重摘課不能調堂。IAL 選修會一拼調；調唔到可揀代堂建議入帳。學校假期、統測、考試同深度學習周沒有正規課堂，不能調堂亦不能代堂。"
       />
       <ScheduleGate>
         <SwapInner />
@@ -226,7 +226,7 @@ function SwapInner() {
         <CardHeader>
           <CardTitle>工作項目：老師病假／事假／公假要調堂安排</CardTitle>
           <CardDescription>
-            1）揀請假種類同日期（可多日）　2）揀由邊日開始搵調堂　3）即時揀建議再轉入紀錄　4）公假不計算代堂 ±　5）高中選修並行時段唔可單獨調　6）IAL
+            1）揀請假種類同日期（可多日）　2）揀由邊日開始搵調堂　3）即時揀建議再轉入紀錄　4）公假不計算代堂 ±　5）重摘課不能調堂　6）高中選修並行時段唔可單獨調　7）IAL
             同一時段一拼調
           </CardDescription>
         </CardHeader>
@@ -530,6 +530,7 @@ function ResultCard({
           </Badge>
           {unit.kind === "ial_bundle" ? <Badge variant="outline">IAL 一拼</Badge> : null}
           {unit.kind === "elective_blocked" ? <Badge variant="outline">選修並行</Badge> : null}
+          {unit.kind === "remedial_blocked" ? <Badge variant="outline">重摘課</Badge> : null}
           <CardTitle className="text-base">{unit.label}</CardTitle>
         </div>
         <CardDescription>
@@ -743,7 +744,7 @@ function ManualSwapForm({
         <CardDescription>
           {editing
             ? `正在改 ${editing.leaveTeacherName} ${editing.leaveDate} ${periodLabel(editing.leavePeriodId)}。儲存後代堂會跟新安排。`
-            : "例如將課堂調去原本空堂／CLP。對手老師可留空（只搬去該節）。已確認紀錄可人手修改或刪除。"}
+            : "例如將課堂調去原本空堂／CLP。對手老師可留空（只搬去該節）。重摘課不能調堂。已確認紀錄可人手修改或刪除。"}
           {" "}
           學校假期、統測、考試同深度學習周沒有正規課堂，不能加入或改去嗰啲日子。
         </CardDescription>
