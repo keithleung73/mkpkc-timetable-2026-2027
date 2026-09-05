@@ -3,6 +3,7 @@ import {
   applyBalances,
   eligibleCoverTeachers,
   generateCoverPlan,
+  mergeCoverSlotIntoPlan,
   MAX_OWN_LESSONS,
   undoBalances,
   weekdayFromIsoDate,
@@ -259,6 +260,68 @@ const F = teacher("F", "己");
     ],
   );
   assert.equal(plan.assignments[0]?.coverTeacherId, "C", "連續代堂風險者應後排");
+}
+
+{
+  const data = schedule([A, B], [lesson("abs-p1", "mon", "p1", "A")]);
+  const sick = generateCoverPlan(data, "mon", "2026-08-31", ["A"], {}, [], { A: "sick" });
+  const sickNext = applyBalances({}, sick);
+  assert.equal(sickNext.A, -1);
+  assert.equal(sickNext.B, 1);
+
+  const official = generateCoverPlan(data, "mon", "2026-08-31", ["A"], {}, [], { A: "official" });
+  assert.equal(official.leaveKinds?.A, "official");
+  const officialNext = applyBalances({ A: 3, B: 1 }, official);
+  assert.equal(officialNext.A, 3, "公假請假人不加減");
+  assert.equal(officialNext.B, 1, "公假代堂人不加減");
+  const officialUndone = undoBalances(officialNext, official);
+  assert.equal(officialUndone.A, 3);
+  assert.equal(officialUndone.B, 1);
+
+  const leftoverOfficial = { ...official, assignments: [], leftover: official.slots };
+  const leftoverNext = applyBalances({}, leftoverOfficial);
+  assert.equal(leftoverNext.A ?? 0, 0, "公假未能編配亦不扣分");
+}
+
+{
+  const data = schedule(
+    [A, B, C],
+    [lesson("abs-p1", "mon", "p1", "A"), lesson("c-p3", "mon", "p3", "C")],
+  );
+  const mixed = generateCoverPlan(data, "mon", "2026-08-31", ["A", "C"], { B: 0 }, [], {
+    A: "official",
+    C: "personal",
+  });
+  const next = applyBalances({}, mixed);
+  assert.equal(next.A ?? 0, 0, "甲公假不計");
+  assert.equal(next.C, -1, "丙事假仍 −1");
+}
+
+{
+  const data = schedule(
+    [A, B],
+    [lesson("abs-p1", "mon", "p1", "A"), lesson("abs-p3", "mon", "p3", "A")],
+  );
+  const merged = mergeCoverSlotIntoPlan(
+    data,
+    null,
+    "2026-08-31",
+    "mon",
+    "A",
+    "p1",
+    "B",
+    "official",
+  );
+  assert.ok(!("error" in merged));
+  if ("error" in merged) throw new Error(merged.error);
+  assert.equal(merged.assignments.length, 1);
+  assert.equal(merged.assignments[0]?.coverTeacherId, "B");
+  assert.equal(merged.leftover.length, 0, "只轉入該一節，其他堂唔當 leftover");
+  assert.equal(merged.slots.length, 1);
+  assert.equal(merged.leaveKinds?.A, "official");
+  const after = applyBalances({}, merged);
+  assert.equal(after.A ?? 0, 0);
+  assert.equal(after.B ?? 0, 0);
 }
 
 void (async () => {

@@ -1,4 +1,5 @@
 import { COVER_PERIOD_IDS, periodLabel as periodLabelFromConstants } from "./constants";
+import { leaveCountsBalance, type LeaveKind } from "./leave";
 import { isTeachingLesson, lessonOccupiesTeacher } from "./lesson-kind";
 import type { DayId, Lesson, ScheduleData, Teacher } from "./types";
 
@@ -43,6 +44,8 @@ export type CoverPlan = {
   day: DayId;
   date: string;
   absentees: string[];
+  /** 每位請假同事嘅病假／事假／公假。公假不計 ±。 */
+  leaveKinds?: Record<string, LeaveKind>;
   slots: CoverSlot[];
   assignments: CoverAssignment[];
   leftover: CoverSlot[];
@@ -382,6 +385,18 @@ function sortByPeriod<T extends { periodId: string; absenteeName?: string; teach
   });
 }
 
+function leaveKindsForAbsentees(
+  absenteeIds: string[],
+  leaveKinds?: Record<string, LeaveKind>,
+): Record<string, LeaveKind> | undefined {
+  if (!leaveKinds) return undefined;
+  const next: Record<string, LeaveKind> = {};
+  for (const id of absenteeIds) {
+    if (leaveKinds[id]) next[id] = leaveKinds[id]!;
+  }
+  return Object.keys(next).length ? next : undefined;
+}
+
 export function generateCoverPlan(
   data: ScheduleData,
   day: DayId,
@@ -389,6 +404,7 @@ export function generateCoverPlan(
   absenteeIds: string[],
   balances: CoverBalances,
   recentPlans: CoverHistoryPlan[] = [],
+  leaveKinds?: Record<string, LeaveKind>,
 ): CoverPlan {
   const uniqueAbs = [...new Set(absenteeIds.filter(Boolean))];
   const absentees = new Set(uniqueAbs);
@@ -427,9 +443,69 @@ export function generateCoverPlan(
     day,
     date,
     absentees: uniqueAbs,
+    leaveKinds: leaveKindsForAbsentees(uniqueAbs, leaveKinds),
     slots,
     assignments: sortByPeriod(day, assignments),
     leftover: sortByPeriod(day, leftover),
+  };
+}
+
+/** 調堂頁即時揀代堂建議：只併入該一節，唔會把當日其餘課堂當 leftover 扣分。 */
+export function mergeCoverSlotIntoPlan(
+  data: ScheduleData,
+  existing: CoverPlan | null,
+  date: string,
+  day: DayId,
+  absenteeId: string,
+  periodId: string,
+  coverTeacherId: string,
+  leaveKind: LeaveKind,
+): CoverPlan | { error: string } {
+  const absentee = data.teachers.find((t) => t.id === absenteeId);
+  const coverTeacher = data.teachers.find((t) => t.id === coverTeacherId);
+  if (!absentee) return { error: "搵唔到請假老師" };
+  if (!coverTeacher) return { error: "搵唔到代堂老師" };
+  if (absenteeId === coverTeacherId) return { error: "請假同事不能代自己" };
+
+  const absentees = [...new Set([...(existing?.absentees ?? []), absenteeId])];
+  const targetSlots = slotsToCover(data, day, [absenteeId]).filter((s) => s.periodId === periodId);
+  if (targetSlots.length === 0) {
+    return { error: "該節無需代堂（可能已調走或當日無課）" };
+  }
+  if (isOccupied(data, coverTeacherId, day, periodId)) {
+    return { error: `${coverTeacher.name} 該節有課，不能代堂` };
+  }
+
+  const keep = (existing?.assignments ?? []).filter(
+    (a) => !(a.absenteeId === absenteeId && a.periodId === periodId),
+  );
+  if (keep.some((a) => a.coverTeacherId === coverTeacherId && a.periodId === periodId)) {
+    return { error: `${coverTeacher.name} 該節已代另一堂` };
+  }
+
+  const newAssignments = targetSlots.map((slot) =>
+    toAssignment(slot, {
+      teacher: coverTeacher,
+      balance: 0,
+      reason: "調堂頁即時揀建議",
+    }),
+  );
+  const assignments = sortByPeriod(day, [...keep, ...newAssignments]);
+  const slotMap = new Map((existing?.slots ?? []).map((s) => [slotKey(s), s]));
+  for (const slot of targetSlots) slotMap.set(slotKey(slot), slot);
+  const slots = sortByPeriod(day, [...slotMap.values()]);
+  const leftover = sortByPeriod(
+    day,
+    slots.filter((s) => !assignments.some((a) => assignmentKey(a) === slotKey(s))),
+  );
+  return {
+    day,
+    date,
+    absentees,
+    leaveKinds: { ...(existing?.leaveKinds ?? {}), [absenteeId]: leaveKind },
+    slots,
+    assignments,
+    leftover,
   };
 }
 
@@ -476,7 +552,7 @@ export function validateCoverPlan(
 
   const expected = slotsToCover(data, plan.day, plan.absentees);
   const expectedKeys = new Set(expected.map(slotKey));
-  if (expected.length !== plan.slots.length || plan.slots.some((s) => !expectedKeys.has(slotKey(s)))) {
+  if (plan.slots.some((s) => !expectedKeys.has(slotKey(s)))) {
     return "需代堂次同請假名單唔符";
   }
 
@@ -506,15 +582,20 @@ export function validateCoverPlan(
   return null;
 }
 
+function absenteeCountsBalance(plan: CoverPlan, teacherId: string): boolean {
+  return leaveCountsBalance(plan.leaveKinds?.[teacherId]);
+}
+
 export function applyBalances(balances: CoverBalances, plan: CoverPlan): CoverBalances {
   const next = { ...balances };
   const covered = new Set(plan.assignments.map(assignmentKey));
   for (const a of plan.assignments) {
+    if (!absenteeCountsBalance(plan, a.absenteeId)) continue;
     next[a.absenteeId] = (next[a.absenteeId] ?? 0) - 1;
     next[a.coverTeacherId] = (next[a.coverTeacherId] ?? 0) + 1;
   }
   for (const slot of plan.slots) {
-    if (!covered.has(slotKey(slot))) {
+    if (!covered.has(slotKey(slot)) && absenteeCountsBalance(plan, slot.teacherId)) {
       next[slot.teacherId] = (next[slot.teacherId] ?? 0) - 1;
     }
   }
@@ -525,11 +606,12 @@ export function undoBalances(balances: CoverBalances, plan: CoverPlan): CoverBal
   const next = { ...balances };
   const covered = new Set(plan.assignments.map(assignmentKey));
   for (const a of plan.assignments) {
+    if (!absenteeCountsBalance(plan, a.absenteeId)) continue;
     next[a.absenteeId] = (next[a.absenteeId] ?? 0) + 1;
     next[a.coverTeacherId] = (next[a.coverTeacherId] ?? 0) - 1;
   }
   for (const slot of plan.slots) {
-    if (!covered.has(slotKey(slot))) {
+    if (!covered.has(slotKey(slot)) && absenteeCountsBalance(plan, slot.teacherId)) {
       next[slot.teacherId] = (next[slot.teacherId] ?? 0) + 1;
     }
   }

@@ -1,4 +1,5 @@
 import { addDaysIso, weekdayFromIsoDate } from "./cover";
+import type { LeaveKind } from "./leave";
 import { isTeachingLesson } from "./lesson-kind";
 import { isSwapAllowedDate, swapBlockedReason, swapPairError } from "./school-calendar";
 import type { DayId, Lesson, ScheduleData } from "./types";
@@ -23,6 +24,7 @@ export type ConfirmedSwap = {
   partnerSubjects: string[];
   partnerClassIds: string[];
   reason: string;
+  leaveKind?: LeaveKind;
 };
 
 export type SwapStoreData = {
@@ -127,6 +129,7 @@ export function confirmedSwapFromSuggestion(
   partnerPeriodId: string,
   partnerLessons: Lesson[],
   reason: string,
+  leaveKind?: LeaveKind,
 ): ConfirmedSwap | { error: string } {
   const leaveDay = weekdayFromIsoDate(leaveDate);
   const partnerWeekday = weekdayFromIsoDate(partnerDate);
@@ -161,6 +164,7 @@ export function confirmedSwapFromSuggestion(
     partnerSubjects: [...new Set(partnerLessons.map((l) => l.subject))],
     partnerClassIds: [...new Set(partnerLessons.flatMap((l) => l.classIds))],
     reason,
+    leaveKind,
   });
 }
 
@@ -171,6 +175,7 @@ export type ManualSwapInput = {
   partnerDate: string;
   partnerPeriodId: string;
   partnerTeacherId?: string;
+  leaveKind?: LeaveKind;
 };
 
 export function confirmedSwapManual(
@@ -204,6 +209,7 @@ export function confirmedSwapManual(
     input.partnerPeriodId,
     partnerLessons,
     reason,
+    input.leaveKind,
   );
 }
 
@@ -223,6 +229,7 @@ export function reviseConfirmedSwap(
     id: current.id,
     confirmedAt: new Date().toISOString(),
     reason: rebuilt.reason.replace(/^人手/, "人手修改"),
+    leaveKind: input.leaveKind ?? current.leaveKind,
   };
   const conflict = swapConflicts(swaps, saved);
   if (conflict) return { error: conflict };

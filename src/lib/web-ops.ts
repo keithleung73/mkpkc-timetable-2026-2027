@@ -1,12 +1,14 @@
 import {
   applyBalances,
   generateCoverPlan,
+  mergeCoverSlotIntoPlan,
   undoBalances,
   validateCoverPlan,
   weekdayFromIsoDate,
   type CoverAssignment,
   type CoverPlan,
 } from "./cover";
+import { parseLeaveKind, type LeaveKind } from "./leave";
 import {
   loadCoverStore,
   loadSwapStore,
@@ -43,6 +45,7 @@ export type SwapBody = {
   partnerLessonIds?: string[];
   partnerDay?: string;
   reason?: string;
+  leaveKind?: LeaveKind;
 };
 
 export type CoverBody = {
@@ -54,6 +57,11 @@ export type CoverBody = {
   assignments?: CoverAssignment[];
   teacherId?: string;
   delta?: number;
+  absenteeId?: string;
+  coverTeacherId?: string;
+  periodId?: string;
+  leaveKind?: LeaveKind;
+  leaveKinds?: Record<string, LeaveKind>;
 };
 
 type Err = { error: string };
@@ -74,7 +82,7 @@ export function localSwapPost(data: ScheduleData, body: SwapBody) {
     const leaveDates = [...new Set((body.leaveDates ?? []).filter(Boolean))].sort();
     const swapFromDate = body.swapFromDate?.trim() ?? "";
     if (!teacherId) return fail("請選擇請假老師");
-    if (leaveDates.length === 0) return fail("請選擇至少一日事假／公假日期");
+    if (leaveDates.length === 0) return fail("請選擇至少一日病假／事假／公假日期");
     if (!swapFromDate || !weekdayFromIsoDate(swapFromDate)) {
       return fail("請選擇上課日作為調堂開始日（星期一至五）");
     }
@@ -105,6 +113,7 @@ export function localSwapPost(data: ScheduleData, body: SwapBody) {
         body.partnerPeriodId ?? "",
         partnerLessons,
         body.reason ?? "確認調堂",
+        body.leaveKind,
       );
     }
     if (!record) return fail("未有調堂紀錄");
@@ -128,6 +137,7 @@ export function localSwapPost(data: ScheduleData, body: SwapBody) {
       partnerDate: body.partnerDate,
       partnerPeriodId: body.partnerPeriodId,
       partnerTeacherId: body.partnerTeacherId || undefined,
+      leaveKind: body.leaveKind,
     });
     if ("error" in record) return fail(record.error);
     const conflict = swapConflicts(loadSwapStore().swaps, record);
@@ -150,6 +160,7 @@ export function localSwapPost(data: ScheduleData, body: SwapBody) {
       partnerDate: body.partnerDate,
       partnerPeriodId: body.partnerPeriodId,
       partnerTeacherId: body.partnerTeacherId || undefined,
+      leaveKind: body.leaveKind,
     });
     if ("error" in revised) return fail(revised.error);
     saveSwapStore({ swaps: revised.swaps });
@@ -191,7 +202,15 @@ export function localCoverPost(data: ScheduleData, body: CoverBody) {
     const absentees = body.absenteeIds ?? [];
     if (absentees.length === 0) return fail("請先勾選請假同事");
     const effective = scheduleForDate(data, date);
-    const plan = generateCoverPlan(effective, day, date, absentees, store.balances, store.plans);
+    const plan = generateCoverPlan(
+      effective,
+      day,
+      date,
+      absentees,
+      store.balances,
+      store.plans,
+      body.leaveKinds,
+    );
     return { plan, balances: store.balances, swaps: loadSwapStore().swaps };
   }
 
@@ -241,6 +260,45 @@ export function localCoverPost(data: ScheduleData, body: CoverBody) {
     };
     saveCoverStore(next);
     return { ok: true, balances: next.balances, plans: next.plans, swaps: loadSwapStore().swaps };
+  }
+
+  if (action === "recordSlot") {
+    const date = body.date ?? "";
+    const closed = coverDateError(date);
+    if (closed) return fail(closed);
+    const day = weekdayFromIsoDate(date);
+    if (!day) return fail("請揀上課日（星期一至五）");
+    const absenteeId = body.absenteeId?.trim();
+    const coverTeacherId = body.coverTeacherId?.trim();
+    const periodId = body.periodId?.trim();
+    if (!absenteeId || !coverTeacherId || !periodId) return fail("請選擇代堂建議");
+    const effective = scheduleForDate(data, date);
+    const existing = store.plans.find((p) => p.date === date) ?? null;
+    const merged = mergeCoverSlotIntoPlan(
+      effective,
+      existing,
+      date,
+      day,
+      absenteeId,
+      periodId,
+      coverTeacherId,
+      parseLeaveKind(body.leaveKind),
+    );
+    if ("error" in merged) return fail(merged.error);
+    let balances = { ...store.balances };
+    const remaining = store.plans.filter((p) => p.date !== date);
+    for (const old of store.plans.filter((p) => p.date === date)) {
+      balances = undoBalances(balances, old);
+    }
+    balances = applyBalances(balances, merged);
+    const saved = {
+      ...merged,
+      id: existing?.id ?? `cover-${date}-${Date.now()}`,
+      confirmedAt: new Date().toISOString(),
+    };
+    const next = { balances, plans: [saved, ...remaining].slice(0, 80) };
+    saveCoverStore(next);
+    return { ok: true, saved, balances: next.balances, plans: next.plans, swaps: loadSwapStore().swaps };
   }
 
   return fail("未知操作");

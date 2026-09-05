@@ -218,6 +218,24 @@ const 乙 = teacher("乙", "乙老師");
 }
 
 {
+  const 丙 = teacher("丙", "丙老師");
+  const data = schedule(
+    [振, 乙, 丙],
+    [
+      lesson("振-2d", "wed", "p5", "振", { classIds: ["2D"], subject: "數學" }),
+      lesson("乙-2d", "thu", "p1", "乙", { classIds: ["2D"], subject: "科學" }),
+      lesson("丙-2d", "fri", "p3", "丙", { classIds: ["2D"], subject: "英文" }),
+    ],
+  );
+  const plan = planTeacherLeaveSwaps(data, "振", ["2026-09-02"], "2026-09-02");
+  const hit = plan.results.find((r) => r.unit.periodId === "p5");
+  assert.equal(hit?.status, "swap");
+  assert.ok((hit?.swaps?.length ?? 0) >= 2, "應列出多於一個可即時揀嘅調堂建議");
+  const periods = new Set(hit?.swaps?.map((s) => s.partnerPeriodId));
+  assert.ok(periods.has("p1") && periods.has("p3"));
+}
+
+{
   const rec = makeConfirmedSwap({
     leaveTeacherId: "振",
     leaveTeacherName: "陳振華",

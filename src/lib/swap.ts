@@ -51,9 +51,13 @@ export type SwapUnitResult = {
   unit: SwapUnit;
   status: "swap" | "cover" | "blocked";
   swap?: SwapMatch;
+  /** 可即時揀嘅對調建議（第一個即 swap） */
+  swaps?: SwapMatch[];
   coverSuggestions: CoverSuggestion[];
   blockers: string[];
 };
+
+const MAX_SWAP_OPTIONS = 6;
 
 export type SwapPlan = {
   teacherId: string;
@@ -282,15 +286,17 @@ function allTeachersFreeIgnoring(
   return teacherIds.every((id) => teacherFreeIgnoring(data, id, day, periodId, ignoreLessonIds));
 }
 
-function findNormalSwap(
+function findNormalSwaps(
   data: ScheduleData,
   unit: SwapUnit,
   leaveTeacherId: string,
   searchDates: string[],
-): SwapMatch | null {
+): SwapMatch[] {
   const lesson = unit.lessons[0];
-  if (!lesson) return null;
+  if (!lesson) return [];
   const ignoreMine = new Set(unit.lessons.map((l) => l.id));
+  const matches: SwapMatch[] = [];
+  const seen = new Set<string>();
 
   for (const partnerDate of searchDates) {
     const day = weekdayFromIsoDate(partnerDate);
@@ -323,7 +329,10 @@ function findNormalSwap(
         continue;
       }
 
-      return {
+      const key = `${partnerDate}|${periodId}|${partner.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      matches.push({
         partnerLessons: [partner],
         partnerDay: day,
         partnerDate,
@@ -332,26 +341,29 @@ function findNormalSwap(
         partnerTeacherIds: [...partner.teacherIds],
         partnerTeacherNames: lessonTeacherNames(data, [partner]),
         reason: `同班對調：${periodLabelFromConstants(unit.periodId)}（${unit.subjects.join("、")}）⇄ ${periodLabelFromConstants(periodId)}（${partner.subject}）`,
-      };
+      });
+      if (matches.length >= MAX_SWAP_OPTIONS) return matches;
     }
   }
-  return null;
+  return matches;
 }
 
-function findIalBundleSwap(
+function findIalBundleSwaps(
   data: ScheduleData,
   unit: SwapUnit,
   leaveTeacherId: string,
   searchDates: string[],
-): SwapMatch | null {
+): SwapMatch[] {
   const seed = unit.lessons[0];
-  if (!seed) return null;
+  if (!seed) return [];
   const ialClass =
     seed.classIds.find(isIalClassId) ?? seed.classIds.find((c) => /IAL/i.test(c)) ?? null;
-  if (!ialClass) return null;
+  if (!ialClass) return [];
 
   const ignoreMine = new Set(unit.lessons.map((l) => l.id));
   const myTeachers = [...new Set(unit.lessons.flatMap((l) => l.teacherIds))];
+  const matches: SwapMatch[] = [];
+  const seen = new Set<string>();
 
   for (const partnerDate of searchDates) {
     const day = weekdayFromIsoDate(partnerDate);
@@ -383,7 +395,13 @@ function findIalBundleSwap(
       // 確保請假老師真係有份喺呢個 bundle（避免只係並行其他科）
       if (!myTeachers.includes(leaveTeacherId)) continue;
 
-      return {
+      const key = `${partnerDate}|${periodId}|${partnerBundle
+        .map((l) => l.id)
+        .sort()
+        .join("+")}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      matches.push({
         partnerLessons: partnerBundle,
         partnerDay: day,
         partnerDate,
@@ -394,10 +412,11 @@ function findIalBundleSwap(
         reason: `IAL 整組對調：${unit.subjects.join("、")} ⇄ ${[
           ...new Set(partnerBundle.map((l) => l.subject)),
         ].join("、")}`,
-      };
+      });
+      if (matches.length >= MAX_SWAP_OPTIONS) return matches;
     }
   }
-  return null;
+  return matches;
 }
 
 function coverForUnit(
@@ -487,17 +506,18 @@ export function planTeacherLeaveSwaps(
       };
     }
 
-    const swap =
+    const swaps =
       unit.kind === "ial_bundle"
-        ? findIalBundleSwap(data, unit, teacherId, searchDates)
-        : findNormalSwap(data, unit, teacherId, searchDates);
+        ? findIalBundleSwaps(data, unit, teacherId, searchDates)
+        : findNormalSwaps(data, unit, teacherId, searchDates);
 
-    if (swap) {
+    if (swaps.length > 0) {
       return {
         unit,
         status: "swap" as const,
-        swap,
-        coverSuggestions: [],
+        swap: swaps[0],
+        swaps,
+        coverSuggestions: coverForUnit(data, unit, teacherId),
         blockers: [],
       };
     }

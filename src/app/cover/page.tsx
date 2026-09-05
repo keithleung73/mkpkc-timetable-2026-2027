@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { FileDown, Minus, Pencil, Plus, Repeat2 } from "lucide-react";
+import { LeaveKindPicker } from "@/components/leave-kind-picker";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
 import { useSchedule } from "@/components/schedule-provider";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +42,11 @@ import type { ScheduleData, Teacher } from "@/lib/types";
 import { coverPdfFilename } from "@/lib/cover-pdf";
 import { filterTeachers, teacherEnglishLabels } from "@/lib/search";
 import { applyConfirmedSwaps, swapsAffectingDate, type ConfirmedSwap } from "@/lib/swap-records";
+import {
+  DEFAULT_LEAVE_KIND,
+  leaveKindLabel,
+  type LeaveKind,
+} from "@/lib/leave";
 import { coverDateError, schoolClosedReason } from "@/lib/school-calendar";
 import { coverRequest } from "@/lib/web-ops";
 import { printCoverPlan } from "@/lib/cover-print";
@@ -58,7 +64,7 @@ export default function CoverPage() {
     <PageBody>
       <PageHeader
         title="代堂編配"
-        description="勾選當日請假同事，系統按已確認調堂後嘅課表編配代堂（唔再用原先空堂）。盡量避開指定同事，同一星期亦盡量唔連續代多過兩日。學校假期、統測、考試、深度學習周同其他無堂日沒有正規課堂，不能調堂亦不能代堂。"
+        description="勾選當日請假同事，並標明病假／事假／公假。公假不計算 ±。系統按已確認調堂後嘅課表編配代堂。學校假期、統測、考試、深度學習周同其他無堂日沒有正規課堂，不能調堂亦不能代堂。"
       />
       <ScheduleGate>
         <Inner />
@@ -71,6 +77,7 @@ function Inner() {
   const { data } = useSchedule();
   const [date, setDate] = useState(hkTodayIso);
   const [absentees, setAbsentees] = useState<string[]>([]);
+  const [leaveKinds, setLeaveKinds] = useState<Record<string, LeaveKind>>({});
   const [q, setQ] = useState("");
   const [balances, setBalances] = useState<CoverBalances>({});
   const [history, setHistory] = useState<SavedCoverPlan[]>([]);
@@ -131,7 +138,23 @@ function Inner() {
   if (!data || !effectiveData) return null;
 
   const toggle = (id: string) => {
-    setAbsentees((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+    setAbsentees((cur) => {
+      if (cur.includes(id)) {
+        setLeaveKinds((kinds) => {
+          const next = { ...kinds };
+          delete next[id];
+          return next;
+        });
+        return cur.filter((x) => x !== id);
+      }
+      setLeaveKinds((kinds) => ({ ...kinds, [id]: kinds[id] ?? DEFAULT_LEAVE_KIND }));
+      return [...cur, id];
+    });
+    setPlan(null);
+  };
+
+  const setAbsenteeLeaveKind = (id: string, kind: LeaveKind) => {
+    setLeaveKinds((cur) => ({ ...cur, [id]: kind }));
     setPlan(null);
   };
 
@@ -149,7 +172,7 @@ function Inner() {
       toast.error("請先勾選請假同事");
       return;
     }
-    const next = generateCoverPlan(effectiveData, day, date, absentees, balances, history);
+    const next = generateCoverPlan(effectiveData, day, date, absentees, balances, history, leaveKinds);
     setPlan(next);
     if (next.slots.length === 0) {
       toast.message("所選同事當日無需要代嘅堂");
@@ -216,10 +239,15 @@ function Inner() {
   const editSaved = (saved: SavedCoverPlan) => {
     setDate(saved.date);
     setAbsentees([...saved.absentees]);
+    setLeaveKinds(
+      saved.leaveKinds ??
+        Object.fromEntries(saved.absentees.map((id) => [id, DEFAULT_LEAVE_KIND])),
+    );
     setPlan({
       day: saved.day,
       date: saved.date,
       absentees: [...saved.absentees],
+      leaveKinds: saved.leaveKinds,
       slots: saved.slots,
       assignments: saved.assignments,
       leftover: saved.leftover,
@@ -272,11 +300,12 @@ function Inner() {
       <Card>
         <CardHeader>
           <CardTitle>編配規則</CardTitle>
-          <CardDescription>請假無返扣分，代堂加分。揀人只睇結餘，唔睇科目。</CardDescription>
+          <CardDescription>病假／事假：請假無返扣分，代堂加分。公假不計算 ±。揀人只睇結餘，唔睇科目。</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-          <p>請假同事每堂 −1；成功代堂同事每堂 +1。未能編配嘅堂，請假人仍然扣分。</p>
-          <p>病假／請假較多（結餘較負）者優先代堂，其後先睇當日原有堂數。</p>
+          <p>病假／事假：請假同事每堂 −1；成功代堂同事每堂 +1。未能編配嘅堂，請假人仍然扣分。</p>
+          <p>公假：仍會編代堂，但請假人同代堂人都不加減分數。</p>
+          <p>病假／事假較多（結餘較負）者優先代堂，其後先睇當日原有堂數。</p>
           <p>當日原有課堂多於 {MAX_OWN_LESSONS} 節者不能代堂。</p>
           <p>學校假期、統測、考試、深度學習周、陸運會、開放日、教師發展日等無堂日無需代堂。</p>
           <p>同一人唔可以連續兩節代堂（例如代完第三節就不能代第四節）；同自己原本課堂相鄰則可以。</p>
@@ -302,6 +331,7 @@ function Inner() {
             onChange={(e) => {
               setDate(e.target.value);
               setAbsentees([]);
+              setLeaveKinds({});
               setPlan(null);
             }}
           />
@@ -324,7 +354,7 @@ function Inner() {
             className="w-56"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="例如：請假、交流團、病假"
+            placeholder="例如：病假、事假、公假、交流團"
           />
         </label>
         <Button
@@ -333,6 +363,7 @@ function Inner() {
           onClick={() => {
             setDate(hkTodayIso());
             setAbsentees([]);
+            setLeaveKinds({});
             setPlan(null);
           }}
         >
@@ -410,7 +441,7 @@ function Inner() {
         <div className="grid gap-6 xl:grid-cols-[minmax(0,22rem)_1fr]">
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-medium">請假同事</h3>
+              <h3 className="text-sm font-medium">請假同事（病假／事假／公假）</h3>
               <span className="text-xs text-muted-foreground">已選 {absentees.length} 人</span>
             </div>
             <Input
@@ -423,20 +454,28 @@ function Inner() {
                 {absentees.map((id) => {
                   const t = teachers.find((x) => x.id === id);
                   if (!t) return null;
+                  const kind = leaveKinds[id] ?? DEFAULT_LEAVE_KIND;
                   return (
-                    <button
-                      key={id}
-                      type="button"
-                      className="inline-flex items-center rounded-full bg-[color:var(--school-navy)] px-2.5 py-1 text-xs text-white"
-                      onClick={() => toggle(id)}
-                    >
-                      {t.name}（{t.code}）
-                    </button>
+                    <div key={id} className="flex flex-wrap items-center gap-1">
+                      <button
+                        type="button"
+                        className="inline-flex items-center rounded-full bg-[color:var(--school-navy)] px-2.5 py-1 text-xs text-white"
+                        onClick={() => toggle(id)}
+                      >
+                        {t.name}（{t.code}）· {leaveKindLabel(kind)}
+                        {kind === "official" ? " 不計±" : ""}
+                      </button>
+                      <LeaveKindPicker
+                        value={kind}
+                        onChange={(next) => setAbsenteeLeaveKind(id, next)}
+                        showOfficialHint={false}
+                      />
+                    </div>
                   );
                 })}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">勾選當日請假、無返校嘅同事。</p>
+              <p className="text-sm text-muted-foreground">勾選當日請假同事，並揀病假／事假／公假。</p>
             )}
             <div className="max-h-[28rem] overflow-y-auto rounded-lg border">
               {listed.length === 0 ? (
@@ -583,6 +622,9 @@ function Inner() {
               >
                 <span>
                   {p.date} {dayLabel(p.day)} · 已編 {p.assignments.length}／{p.slots.length} 堂
+                  {p.absentees.some((id) => p.leaveKinds?.[id])
+                    ? ` · ${[...new Set(p.absentees.map((id) => leaveKindLabel(p.leaveKinds?.[id] ?? DEFAULT_LEAVE_KIND)))].join("／")}`
+                    : ""}
                 </span>
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" disabled={busy} onClick={() => editSaved(p)}>
@@ -752,7 +794,15 @@ function PlanTable({
                       {a.subject} · {roomName(data, a.roomId)}
                     </div>
                   </td>
-                  <td className="px-3 py-2">{a.absenteeName}</td>
+                  <td className="px-3 py-2">
+                    {a.absenteeName}
+                    {plan.leaveKinds?.[a.absenteeId] ? (
+                      <div className="text-xs text-muted-foreground">
+                        {leaveKindLabel(plan.leaveKinds[a.absenteeId])}
+                        {plan.leaveKinds[a.absenteeId] === "official" ? " · 不計±" : ""}
+                      </div>
+                    ) : null}
+                  </td>
                   <td className="px-3 py-2">
                     <Select
                       value={a.coverTeacherId}
@@ -803,7 +853,15 @@ function PlanTable({
                       {s.subject} · {roomName(data, s.roomId)}
                     </div>
                   </td>
-                  <td className="px-3 py-2">{s.teacherName}</td>
+                  <td className="px-3 py-2">
+                    {s.teacherName}
+                    {plan.leaveKinds?.[s.teacherId] ? (
+                      <div className="text-xs text-muted-foreground">
+                        {leaveKindLabel(plan.leaveKinds[s.teacherId])}
+                        {plan.leaveKinds[s.teacherId] === "official" ? " · 不計±" : ""}
+                      </div>
+                    ) : null}
+                  </td>
                   <td className="px-3 py-2">
                     {options.length === 0 ? (
                       <span className="text-xs text-destructive">無人可代</span>
@@ -838,17 +896,25 @@ function PlanTable({
 
       <div className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
         入帳預覽：
-        {Object.entries(deltas)
-          .filter(([, n]) => n !== 0)
-          .sort((a, b) => a[1] - b[1])
-          .map(([id, n]) => {
-            const t = data.teachers.find((x) => x.id === id);
-            return (
-              <span key={id} className="mr-2">
-                {t?.name ?? id} {n > 0 ? `+${n}` : n}
-              </span>
-            );
-          })}
+        {Object.entries(deltas).every(([, n]) => n === 0) ? (
+          <span>
+            {plan.absentees.every((id) => plan.leaveKinds?.[id] === "official")
+              ? "全部公假，不計算 ±"
+              : "無加減"}
+          </span>
+        ) : (
+          Object.entries(deltas)
+            .filter(([, n]) => n !== 0)
+            .sort((a, b) => a[1] - b[1])
+            .map(([id, n]) => {
+              const t = data.teachers.find((x) => x.id === id);
+              return (
+                <span key={id} className="mr-2">
+                  {t?.name ?? id} {n > 0 ? `+${n}` : n}
+                </span>
+              );
+            })
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">

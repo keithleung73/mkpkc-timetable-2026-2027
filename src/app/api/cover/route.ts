@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import {
   applyBalances,
   generateCoverPlan,
+  mergeCoverSlotIntoPlan,
   type CoverAssignment,
   type CoverPlan,
   undoBalances,
   validateCoverPlan,
   weekdayFromIsoDate,
 } from "@/lib/cover";
+import { parseLeaveKind, type LeaveKind } from "@/lib/leave";
 import { coverDateError } from "@/lib/school-calendar";
 import { readCoverStore, writeCoverStore } from "@/lib/cover-store";
 import { readSchedule } from "@/lib/store";
@@ -29,6 +31,11 @@ type Body = {
   assignments?: CoverAssignment[];
   teacherId?: string;
   delta?: number;
+  absenteeId?: string;
+  coverTeacherId?: string;
+  periodId?: string;
+  leaveKind?: LeaveKind;
+  leaveKinds?: Record<string, LeaveKind>;
 };
 
 function scheduleForDate(date: string) {
@@ -61,7 +68,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "請先勾選請假同事" }, { status: 400 });
     }
     const data = scheduleForDate(date);
-    const plan = generateCoverPlan(data, day, date, absentees, store.balances, store.plans);
+    const plan = generateCoverPlan(
+      data,
+      day,
+      date,
+      absentees,
+      store.balances,
+      store.plans,
+      body.leaveKinds,
+    );
     return NextResponse.json({ plan, balances: store.balances, swaps: readSwapStore().swaps });
   }
 
@@ -135,6 +150,59 @@ export async function POST(req: Request) {
     writeCoverStore(next);
     return NextResponse.json({
       ok: true,
+      balances: next.balances,
+      plans: next.plans,
+      swaps: readSwapStore().swaps,
+    });
+  }
+
+  if (action === "recordSlot") {
+    const date = body.date ?? "";
+    const closed = coverDateError(date);
+    if (closed) {
+      return NextResponse.json({ error: closed }, { status: 400 });
+    }
+    const day = weekdayFromIsoDate(date);
+    if (!day) {
+      return NextResponse.json({ error: "請揀上課日（星期一至五）" }, { status: 400 });
+    }
+    const absenteeId = body.absenteeId?.trim();
+    const coverTeacherId = body.coverTeacherId?.trim();
+    const periodId = body.periodId?.trim();
+    if (!absenteeId || !coverTeacherId || !periodId) {
+      return NextResponse.json({ error: "請選擇代堂建議" }, { status: 400 });
+    }
+    const data = scheduleForDate(date);
+    const existing = store.plans.find((p) => p.date === date) ?? null;
+    const merged = mergeCoverSlotIntoPlan(
+      data,
+      existing,
+      date,
+      day,
+      absenteeId,
+      periodId,
+      coverTeacherId,
+      parseLeaveKind(body.leaveKind),
+    );
+    if ("error" in merged) {
+      return NextResponse.json({ error: merged.error }, { status: 400 });
+    }
+    let balances = { ...store.balances };
+    const remaining = store.plans.filter((p) => p.date !== date);
+    for (const old of store.plans.filter((p) => p.date === date)) {
+      balances = undoBalances(balances, old);
+    }
+    balances = applyBalances(balances, merged);
+    const saved = {
+      ...merged,
+      id: existing?.id ?? `cover-${date}-${Date.now()}`,
+      confirmedAt: new Date().toISOString(),
+    };
+    const next = { balances, plans: [saved, ...remaining].slice(0, 80) };
+    writeCoverStore(next);
+    return NextResponse.json({
+      ok: true,
+      saved,
       balances: next.balances,
       plans: next.plans,
       swaps: readSwapStore().swaps,

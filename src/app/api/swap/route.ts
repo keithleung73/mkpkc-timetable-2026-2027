@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { weekdayFromIsoDate } from "@/lib/cover";
+import type { LeaveKind } from "@/lib/leave";
 import { readSchedule } from "@/lib/store";
 import { planTeacherLeaveSwaps } from "@/lib/swap";
 import {
@@ -32,6 +33,7 @@ type Body = {
   partnerLessonIds?: string[];
   partnerDay?: string;
   reason?: string;
+  leaveKind?: LeaveKind;
 };
 
 export async function POST(req: Request) {
@@ -54,7 +56,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "請選擇請假老師" }, { status: 400 });
     }
     if (leaveDates.length === 0) {
-      return NextResponse.json({ error: "請選擇至少一日事假／公假日期" }, { status: 400 });
+      return NextResponse.json({ error: "請選擇至少一日病假／事假／公假日期" }, { status: 400 });
     }
     if (!swapFromDate || !weekdayFromIsoDate(swapFromDate)) {
       return NextResponse.json({ error: "請選擇上課日作為調堂開始日（星期一至五）" }, { status: 400 });
@@ -89,6 +91,7 @@ export async function POST(req: Request) {
         body.partnerPeriodId ?? "",
         partnerLessons,
         body.reason ?? "確認調堂",
+        body.leaveKind,
       );
     }
     if (!record) return NextResponse.json({ error: "未有調堂紀錄" }, { status: 400 });
@@ -112,6 +115,7 @@ export async function POST(req: Request) {
       partnerDate: body.partnerDate,
       partnerPeriodId: body.partnerPeriodId,
       partnerTeacherId: body.partnerTeacherId || undefined,
+      leaveKind: body.leaveKind,
     });
     if ("error" in record) return NextResponse.json({ error: record.error }, { status: 400 });
     const conflict = swapConflicts(readSwapStore().swaps, record);
@@ -133,6 +137,7 @@ export async function POST(req: Request) {
       partnerDate: body.partnerDate,
       partnerPeriodId: body.partnerPeriodId,
       partnerTeacherId: body.partnerTeacherId || undefined,
+      leaveKind: body.leaveKind,
     });
     if ("error" in revised) return NextResponse.json({ error: revised.error }, { status: 400 });
     writeConfirmedSwaps(revised.swaps);
