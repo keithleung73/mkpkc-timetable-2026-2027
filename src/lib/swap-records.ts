@@ -3,8 +3,8 @@ import type { LeaveKind } from "./leave";
 import { isClpSubject, isRemedialLesson, isTeachingLesson } from "./lesson-kind";
 import { isSwapAllowedDate, swapBlockedReason, swapPairError } from "./school-calendar";
 import {
-  exceedsSameSubjectSwapLimit,
   roomsFreeForMove,
+  swapExceedsClassSubjectDayCap,
   type SwapMode,
   type SwapPeriodPair,
 } from "./swap-rules";
@@ -179,9 +179,18 @@ export function confirmedSwapFromSuggestion(
         return { error: "原節次課室已被佔用" };
       }
     }
-    if (exceedsSameSubjectSwapLimit(leaveLessons) || (periodPairs?.length ?? 0) > 2) {
-      return { error: "同一科不能一次過調 4 堂或以上" };
+    if ((periodPairs?.length ?? 0) > 2) {
+      return { error: "同一科兩堂一拼最多對調兩組連堂" };
     }
+    const classCap = swapExceedsClassSubjectDayCap(
+      data,
+      leaveDay,
+      partnerDay,
+      leaveLessons,
+      partnerLessons,
+      pairs,
+    );
+    if (classCap) return { error: classCap };
   }
   const leaveTeacher = data.teachers.find((t) => t.id === leaveTeacherId);
   const partnerTeacherIds = [...new Set(partnerLessons.flatMap((l) => l.teacherIds))];

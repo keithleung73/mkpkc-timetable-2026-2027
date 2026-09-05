@@ -83,13 +83,13 @@ const 乙 = teacher("乙", "乙老師");
   const data = schedule(
     [振, 甲, 乙],
     [
-      lesson("振-p1", "thu", "p1", "振"),
-      lesson("振-p2", "thu", "p2", "振"),
-      lesson("振-p3", "thu", "p3", "振"),
-      lesson("振-p5", "thu", "p5", "振"),
-      lesson("振-p6", "thu", "p6", "振"),
+      lesson("振-p1", "thu", "p1", "振", { classIds: ["2A"] }),
+      lesson("振-p2", "thu", "p2", "振", { classIds: ["2B"] }),
+      lesson("振-p3", "thu", "p3", "振", { classIds: ["2C"] }),
+      lesson("振-p5", "thu", "p5", "振", { classIds: ["3A"] }),
+      lesson("振-p6", "thu", "p6", "振", { classIds: ["3B"] }),
       lesson("振-2d", "thu", "p7", "振", { classIds: ["2D"], subject: "數學" }),
-      lesson("振-p8", "thu", "p8", "振"),
+      lesson("振-p8", "thu", "p8", "振", { classIds: ["3C"] }),
       lesson("甲-p4", "thu", "p4", "甲", { classIds: ["1A"], subject: "英文", roomId: "201" }),
     ],
   );
@@ -430,31 +430,37 @@ const 乙 = teacher("乙", "乙老師");
 }
 
 {
+  const 萬 = teacher("萬", "萬老師");
   const data = schedule(
-    [振],
+    [萬],
     [
-      lesson("a", "thu", "p1", "振"),
-      lesson("b", "thu", "p2", "振"),
-      lesson("c", "thu", "p3", "振"),
-      lesson("d", "thu", "p5", "振"),
+      lesson("c1", "thu", "p1", "萬", { classIds: ["4A"], subject: "中文", roomId: "406" }),
+      lesson("c2", "thu", "p2", "萬", { classIds: ["4A"], subject: "中文", roomId: "406" }),
+      lesson("c3", "thu", "p3", "萬", { classIds: ["4A"], subject: "中文", roomId: "406" }),
+      lesson("c4", "wed", "p5", "萬", { classIds: ["4A"], subject: "中文", roomId: "406" }),
     ],
   );
-  const tooMany = confirmedSwapFromSuggestion(
-    data,
-    "振",
-    "2026-09-03",
-    "p1",
-    data.lessons,
-    "2026-09-10",
-    "thu",
-    "p4",
-    [],
-    "一次過四堂",
-    undefined,
-    "period",
-  );
-  assert.ok("error" in tooMany, "同一科不能一次過調 4 堂或以上");
-  if ("error" in tooMany) assert.match(tooMany.error, /4 堂/);
+  const blocked = confirmedSwapManual(data, {
+    leaveTeacherId: "萬",
+    leaveDate: "2026-09-02",
+    leavePeriodId: "p5",
+    partnerDate: "2026-09-03",
+    partnerPeriodId: "p4",
+  });
+  assert.ok("error" in blocked, "調堂後 4A 星期四不能有 4 堂中文");
+  if ("error" in blocked) {
+    assert.match(blocked.error, /4A/);
+    assert.match(blocked.error, /中文/);
+  }
+
+  const ok = confirmedSwapManual(data, {
+    leaveTeacherId: "萬",
+    leaveDate: "2026-09-02",
+    leavePeriodId: "p5",
+    partnerDate: "2026-09-04",
+    partnerPeriodId: "p3",
+  });
+  assert.ok(!("error" in ok), String((ok as { error?: string }).error ?? "4A 中文調去未滿 4 堂嘅日子應成功"));
 }
 
 {
@@ -462,11 +468,22 @@ const 乙 = teacher("乙", "乙老師");
   const plan = planTeacherLeaveSwaps(live, "振", ["2026-09-03"], "2026-09-03");
   const twoE = plan.results.find((r) => r.unit.periodId === "p3" && r.unit.kind === "normal");
   assert.ok(
-    twoE?.swaps?.some((s) => s.mode === "clp"),
-    "正式課表 CLP 可以調堂（2E 數學調去星期三 CLP）",
+    !(twoE?.swaps ?? []).some((s) => s.mode === "clp"),
+    "2E 星期三已有 3 堂數學，不能再調去當日 CLP",
+  );
+  const pair12 = plan.results.find((r) => r.unit.kind === "subject_pair" && r.unit.periodId === "p1");
+  assert.ok(
+    !(pair12?.swaps ?? []).some((s) => s.partnerTeacherIds.includes("蕭")),
+    "2E 數學連堂對調中文後星期四會有 4 堂中文，不能建議",
   );
   const pair = plan.results.find((r) => r.unit.kind === "subject_pair" && r.unit.periodId === "p7");
   assert.ok(pair, "2D 數學第七、八節應成同一科兩堂");
+
+  const tong = planTeacherLeaveSwaps(live, "彤", ["2026-09-08"], "2026-09-08");
+  assert.ok(
+    tong.results.some((r) => (r.swaps ?? []).some((s) => s.mode === "clp")),
+    "正式課表 CLP 可以調堂（1A 普通話調去星期三 CLP）",
+  );
 }
 
 {

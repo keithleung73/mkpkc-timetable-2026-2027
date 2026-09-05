@@ -14,6 +14,7 @@ import {
   roomsFreeForMove,
   splitRotatePartnerSubject,
   subjectKey,
+  swapExceedsClassSubjectDayCap,
   teacherHasOnlyClpOrFree,
   type SwapMode,
   type SwapPeriodPair,
@@ -395,7 +396,10 @@ function findNormalSwaps(
         if (
           allTeachersFreeIgnoring(data, partnerTeachers, unit.day, unit.periodId, new Set(partners.map((l) => l.id))) &&
           roomsFreeForMove(data, unit.lessons, day, periodId, ignoreBoth) &&
-          roomsFreeForMove(data, partners, unit.day, unit.periodId, ignoreBoth)
+          roomsFreeForMove(data, partners, unit.day, unit.periodId, ignoreBoth) &&
+          !swapExceedsClassSubjectDayCap(data, unit.day, day, unit.lessons, partners, [
+            { leavePeriodId: unit.periodId, partnerPeriodId: periodId },
+          ])
         ) {
           const multi = partnerTeachers.length > 1 || partners.length > 1;
           const key = `${partnerDate}|${periodId}|${partners
@@ -432,7 +436,10 @@ function findNormalSwaps(
       if (
         clpHere.length > 0 &&
         teacherHasOnlyClpOrFree(data, leaveTeacherId, day, periodId, ignoreLeaveOnPartnerDay) &&
-        roomsFreeForMove(data, unit.lessons, day, periodId, ignoreLeaveOnPartnerDay)
+        roomsFreeForMove(data, unit.lessons, day, periodId, ignoreLeaveOnPartnerDay) &&
+        !swapExceedsClassSubjectDayCap(data, unit.day, day, unit.lessons, [], [
+          { leavePeriodId: unit.periodId, partnerPeriodId: periodId },
+        ])
       ) {
         const key = `${partnerDate}|${periodId}|clp`;
         if (
@@ -556,6 +563,14 @@ function findSubjectPairSwaps(
       if (!roomsFreeForMove(data, [second], day, pb, ignoreBoth)) continue;
       if (!roomsFreeForMove(data, partnersA, unit.day, first.periodId, ignoreBoth)) continue;
       if (!roomsFreeForMove(data, partnersB, unit.day, second.periodId, ignoreBoth)) continue;
+      if (
+        swapExceedsClassSubjectDayCap(data, unit.day, day, unit.lessons, partners, [
+          { leavePeriodId: first.periodId, partnerPeriodId: pa },
+          { leavePeriodId: second.periodId, partnerPeriodId: pb },
+        ])
+      ) {
+        continue;
+      }
 
       const key = `${partnerDate}|${pa}+${pb}|${partners
         .map((l) => l.id)
@@ -633,6 +648,13 @@ function findIalBundleSwaps(
       const ignoreBoth = new Set([...ignoreLeaveOnPartnerDay, ...partnerBundle.map((l) => l.id)]);
       if (!roomsFreeForMove(data, unit.lessons, day, periodId, ignoreBoth)) continue;
       if (!roomsFreeForMove(data, partnerBundle, unit.day, unit.periodId, ignoreBoth)) continue;
+      if (
+        swapExceedsClassSubjectDayCap(data, unit.day, day, unit.lessons, partnerBundle, [
+          { leavePeriodId: unit.periodId, partnerPeriodId: periodId },
+        ])
+      ) {
+        continue;
+      }
 
       // 確保請假老師真係有份喺呢個 bundle（避免只係並行其他科）
       if (!myTeachers.includes(leaveTeacherId)) continue;
