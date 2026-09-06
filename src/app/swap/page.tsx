@@ -365,6 +365,12 @@ function SwapInner() {
               <Repeat2 className="size-4" />
               前往代堂編配
             </Link>
+            <Link
+              href="/teacher-records"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium hover:bg-muted"
+            >
+              查閱代調記錄
+            </Link>
           </div>
         </CardContent>
       </Card>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { FileDown, Minus, Pencil, Plus, Repeat2 } from "lucide-react";
 import { LeaveKindPicker } from "@/components/leave-kind-picker";
@@ -526,6 +527,12 @@ function Inner() {
               <Repeat2 />
               產生代堂方案
             </Button>
+            <Link
+              href="/teacher-records"
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-border px-2.5 text-sm font-medium hover:bg-muted"
+            >
+              查閱每位老師代調記錄
+            </Link>
           </section>
 
           <section className="min-w-0 space-y-4">

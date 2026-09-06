@@ -5,6 +5,7 @@ import {
   ArrowLeftRight,
   CalendarDays,
   DoorOpen,
+  ClipboardList,
   Repeat2,
   Search,
   Share2,
@@ -68,6 +69,12 @@ const LINKS = [
     title: "代堂編配",
     desc: "勾選請假同事並標明病假／事假／公假；公假不計 ±。按負數結餘優先組當日代堂方案。",
     icon: Repeat2,
+  },
+  {
+    href: "/teacher-records",
+    title: "代堂及調課記錄",
+    desc: "按老師查閱代堂同調堂紀錄；可揀每日、每星期、每月或自訂區間，再輸出 Excel／CSV。",
+    icon: ClipboardList,
   },
 ];
 
