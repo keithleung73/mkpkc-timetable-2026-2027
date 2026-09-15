@@ -15,7 +15,9 @@ const noto = Noto_Sans_TC({
 
 export const metadata: Metadata = {
   title: `${SCHOOL_NAME}課表查詢`,
-  description: `${SCHOOL_YEAR} 學務發展部老師／班別時間表本機查詢系統`,
+  description: `${SCHOOL_YEAR} 學務發展部課表查詢（需學務部提供的開啟連結）`,
+  robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } },
+  referrer: "no-referrer",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

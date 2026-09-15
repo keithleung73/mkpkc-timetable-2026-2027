@@ -13,10 +13,16 @@
 # testing
 /coverage
 
+# 明文課表同官方 Excel 唔入公開 GitHub
+data/schedule.json
+data/official/*.xlsx
+.site-access-key
+
 # next.js
 /.next/
 /out/
 /public/data/schedule.json
+/public/data/schedule.enc.json
 
 # production
 /build

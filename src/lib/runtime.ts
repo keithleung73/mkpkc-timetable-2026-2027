@@ -13,6 +13,6 @@ export function withBasePath(path: string) {
 }
 
 export function scheduleDataUrl() {
-  if (isStaticExport) return withBasePath("/data/schedule.json");
+  if (isStaticExport) return withBasePath("/data/schedule.enc.json");
   return "/api/schedule";
 }
