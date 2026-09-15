@@ -4,15 +4,18 @@ import Link from "next/link";
 import {
   ArrowLeftRight,
   CalendarDays,
-  DoorOpen,
   ClipboardList,
+  Copy,
+  DoorOpen,
   Repeat2,
   Search,
   Share2,
   Users,
   UserSearch,
 } from "lucide-react";
-import { isStaticExport, GITHUB_PAGES_SITE } from "@/lib/runtime";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { isStaticExport } from "@/lib/runtime";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
@@ -97,7 +100,7 @@ export default function HomePage() {
 }
 
 function DashboardInner() {
-  const { data } = useSchedule();
+  const { data, shareUrl } = useSchedule();
   const day = currentDay();
   const periodId = currentPeriodId();
   const nowLessons =
@@ -119,16 +122,33 @@ function DashboardInner() {
         <Stat label="特別室" value={s.specialRooms} />
       </div>
 
-      {isStaticExport ? (
+      {isStaticExport && shareUrl ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">網上地址</CardTitle>
-            <CardDescription>同事用瀏覽器打開即可查課表（唯讀）。</CardDescription>
+            <CardTitle className="text-base">給同事的開啟連結</CardTitle>
+            <CardDescription>
+              只將呢條完整連結（含 #k=）傳去 WhatsApp／電郵。冇呢段就開唔到課表；亦唔好公開貼上 GitHub。
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <a className="font-mono text-sm underline-offset-2 hover:underline" href={GITHUB_PAGES_SITE}>
-              {GITHUB_PAGES_SITE}
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <a className="break-all font-mono text-sm underline-offset-2 hover:underline" href={shareUrl}>
+              {shareUrl}
             </a>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(shareUrl);
+                  toast.success("已複製開啟連結");
+                } catch {
+                  toast.error("複製失敗，請人手反白網址");
+                }
+              }}
+            >
+              <Copy />
+              複製連結
+            </Button>
           </CardContent>
         </Card>
       ) : null}

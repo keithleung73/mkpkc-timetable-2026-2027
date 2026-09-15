@@ -23,15 +23,13 @@
 - 會議同課後時段不列入代堂。確認入帳後會累計結餘；同一日再確認會覆蓋當日方案。
 - **匯出 PDF**：將當日方案輸出為學務「代堂調堂處理」橫向表格（日期、請假老師、代堂人、受影響科目）。
 
-## 網上查詢（GitHub Pages）
+## 網上查詢（只可用學務部連結）
 
-公開網址：
+GitHub Free 若將倉庫轉私人，GitHub Pages 會被停用，所以倉庫保持公開，但**明文課表唔入庫**：GitHub 只見到加密檔。網上版要用學務部 WhatsApp／電郵發出嘅**完整開啟連結**（網址含 `#k=`）。冇呢段就只見到鎖屏，搜尋引擎亦唔會收錄。
 
-**https://keithleung73.github.io/mkpkc-timetable-2026-2027/**
+請唔好公開張貼 GitHub 倉庫或無 `#k=` 嘅網址。更新課表後喺學務部電腦執行 `npm run encrypt-data`，再發佈 Pages。
 
-可查老師／班別／空閒，亦可做**調堂**同**代堂**。網上版紀錄存在該部瀏覽器，唔會自動同步去其他同事電腦。匯入 Excel 仍要用下面「校內網站」。
-
-倉庫公開後，GitHub Pages 由 `gh-pages` 分支發佈。合併入 `main` 後 Actions 會自動更新。
+校內「共用啟動」仍然讀本機明文 `data/schedule.json`，同事喺校網打開唔使開啟碼。
 
 ## 給同事使用（校內網站）
 
@@ -53,7 +51,7 @@ npm install
 npm run dev
 ```
 
-`data/schedule.json` 已係 2026–2027 正式教師時間表。唔使每次都 `npm run seed`。
+學務部電腦保留明文 `data/schedule.json`（唔入 GitHub）。唔使每次都 `npm run seed`。更新課表後執行 `npm run encrypt-data` 先發佈網上版。
 
 瀏覽器打開：
 

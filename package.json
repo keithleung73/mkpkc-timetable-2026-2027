@@ -15,7 +15,9 @@
     "test:cover": "tsx scripts/test-cover.ts",
     "test:swap": "tsx scripts/test-swap.ts",
     "test:calendar": "tsx scripts/test-calendar.ts",
-    "test:records": "tsx scripts/test-teacher-records.ts"
+    "test:records": "tsx scripts/test-teacher-records.ts",
+    "encrypt-data": "tsx scripts/encrypt-schedule.ts",
+    "test:access": "tsx scripts/test-site-access.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
