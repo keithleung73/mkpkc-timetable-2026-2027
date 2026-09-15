@@ -101,7 +101,7 @@ export async function encryptUtf8(plain: string, passphrase: string): Promise<En
   const iv = randomBytes(12);
   const key = await deriveKey(passphrase, salt, PBKDF2_ITERATIONS);
   const encoded = new TextEncoder().encode(plain);
-  const ctBuf = await crypto.subtle.encrypt({ name: "AES-GCM", iv: ivBuf(iv) }, key, encoded);
+  const ctBuf = await crypto.subtle.encrypt({ name: "AES-GCM", iv: asBufferSource(iv) }, key, asBufferSource(encoded));
   return {
     v: 1,
     alg: "AES-GCM",
@@ -123,7 +123,11 @@ export async function decryptUtf8(blob: EncryptedBlob, passphrase: string): Prom
     const iv = b64ToBytes(blob.iv);
     const ct = b64ToBytes(blob.ct);
     const key = await deriveKey(passphrase, salt, blob.iter);
-    const plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBuf(iv) }, key, ct);
+    const plainBuf = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: asBufferSource(iv) },
+      key,
+      asBufferSource(ct),
+    );
     return new TextDecoder().decode(plainBuf);
   } catch {
     throw new SiteAccessError("呢條連結無效。請向學務發展部重新索取開啟連結。", "invalid");
@@ -139,7 +143,7 @@ async function deriveKey(passphrase: string, salt: Uint8Array, iter: number) {
     ["deriveKey"],
   );
   return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt: ivBuf(salt), iterations: iter, hash: "SHA-256" },
+    { name: "PBKDF2", salt: asBufferSource(salt), iterations: iter, hash: "SHA-256" },
     material,
     { name: "AES-GCM", length: 256 },
     false,
@@ -153,8 +157,10 @@ function randomBytes(n: number): Uint8Array {
   return bytes;
 }
 
-function ivBuf(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+function asBufferSource(bytes: Uint8Array): ArrayBuffer {
+  const copy = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(copy).set(bytes);
+  return copy;
 }
 
 function bytesToB64(bytes: Uint8Array): string {
