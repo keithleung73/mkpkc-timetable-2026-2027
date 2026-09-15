@@ -20,10 +20,15 @@ export const metadata: Metadata = {
   referrer: "no-referrer",
 };
 
+const CAPTURE_ACCESS_SCRIPT = `(function(){try{var h=String(location.hash||"").replace(/^#/,"");var q=new URLSearchParams(h).get("k")||new URLSearchParams(location.search).get("k");if(q)sessionStorage.setItem("mkpkc.siteAccess.v1",q);}catch(e){}})();`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="zh-Hant" className={`${noto.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col font-sans">
+        {process.env.NEXT_PUBLIC_STATIC === "true" ? (
+          <script dangerouslySetInnerHTML={{ __html: CAPTURE_ACCESS_SCRIPT }} />
+        ) : null}
         <TooltipProvider>
           <ScheduleProvider>
             <AppShell>{children}</AppShell>

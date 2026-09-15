@@ -61,10 +61,24 @@ export function readStoredAccessCode(): string | null {
 export function captureAccessCodeFromLocation(loc = window.location): string | null {
   const hashParams = new URLSearchParams(loc.hash.replace(/^#/, ""));
   const fromHash = hashParams.get(ACCESS_PARAM)?.trim();
-  if (fromHash) return fromHash;
+  if (fromHash) {
+    try {
+      sessionStorage.setItem(ACCESS_STORAGE_KEY, fromHash);
+    } catch {
+      /* ignore */
+    }
+    return fromHash;
+  }
 
   const fromQuery = new URLSearchParams(loc.search).get(ACCESS_PARAM)?.trim();
-  if (fromQuery) return fromQuery;
+  if (fromQuery) {
+    try {
+      sessionStorage.setItem(ACCESS_STORAGE_KEY, fromQuery);
+    } catch {
+      /* ignore */
+    }
+    return fromQuery;
+  }
 
   return readStoredAccessCode();
 }

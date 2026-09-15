@@ -124,6 +124,16 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }) {
     void reload();
   }, [reload]);
 
+  useEffect(() => {
+    if (!isStaticExport) return;
+    const onHash = () => {
+      const code = captureAccessCodeFromLocation();
+      if (code) void unlock(code);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [unlock]);
+
   const shareUrl = accessCode ? githubPagesUnlockUrl(GITHUB_PAGES_SITE, accessCode) : null;
 
   const value = useMemo(
