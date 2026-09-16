@@ -1,7 +1,10 @@
 import { COVER_PERIOD_IDS, periodLabel as periodLabelFromConstants } from "./constants";
+import { coverWeight, formatCoverPoints, HOMEROOM_PERIOD_ID, isHomeroomLesson } from "./homeroom";
 import { leaveCountsBalance, type LeaveKind } from "./leave";
 import { isTeachingLesson, lessonOccupiesTeacher } from "./lesson-kind";
 import type { DayId, Lesson, ScheduleData, Teacher } from "./types";
+
+export { coverWeight, formatCoverPoints };
 
 export const MAX_OWN_LESSONS = 6;
 
@@ -162,8 +165,8 @@ export type CoverPickContext = {
 };
 
 export function coverPeriodIdsForDay(day: DayId): string[] {
-  if (day === "fri") return COVER_PERIOD_IDS.filter((id) => id !== "p9");
-  return [...COVER_PERIOD_IDS];
+  const core = day === "fri" ? COVER_PERIOD_IDS.filter((id) => id !== "p9") : [...COVER_PERIOD_IDS];
+  return [HOMEROOM_PERIOD_ID, ...core];
 }
 
 
@@ -175,6 +178,10 @@ export function teachingLessonsOnDay(data: ScheduleData, teacherId: string, day:
       isTeachingLesson(l) &&
       coverPeriodIdsForDay(day).includes(l.periodId),
   );
+}
+
+export function teachingLoadOnDay(data: ScheduleData, teacherId: string, day: DayId) {
+  return teachingLessonsOnDay(data, teacherId, day).reduce((sum, l) => sum + coverWeight(l.periodId), 0);
 }
 
 export function slotKey(s: {
@@ -205,6 +212,24 @@ export function slotsToCover(data: ScheduleData, day: DayId, absenteeIds: string
     if (lesson.day !== day) continue;
     if (!isTeachingLesson(lesson)) continue;
     if (!coverPeriods.has(lesson.periodId)) continue;
+    if (isHomeroomLesson(lesson)) {
+      const stillHere = lesson.teacherIds.filter((id) => !abs.has(id));
+      if (stillHere.length > 0) continue;
+      const leadId = lesson.teacherIds.find((id) => abs.has(id));
+      if (!leadId) continue;
+      const teacher = data.teachers.find((t) => t.id === leadId);
+      const slot: CoverSlot = {
+        periodId: lesson.periodId,
+        classIds: [...lesson.classIds],
+        subject: lesson.subject,
+        roomId: lesson.roomId,
+        teacherId: leadId,
+        teacherName: teacher?.name ?? leadId,
+      };
+      const key = slotKey(slot);
+      if (!grouped.has(key)) grouped.set(key, slot);
+      continue;
+    }
     for (const teacherId of lesson.teacherIds) {
       if (!abs.has(teacherId)) continue;
       const teacher = data.teachers.find((t) => t.id === teacherId);
@@ -286,7 +311,7 @@ export function eligibleCoverTeachers(
   for (const teacher of data.teachers) {
     if (absentees.has(teacher.id)) continue;
     if (takenThisPeriod.has(teacher.id)) continue;
-    const own = teachingLessonsOnDay(data, teacher.id, day).length;
+    const own = teachingLoadOnDay(data, teacher.id, day);
     if (own > MAX_OWN_LESSONS) continue;
     if (isOccupied(data, teacher.id, day, slot.periodId)) continue;
     if (consecutiveCoverViolation(day, slot.periodId, alreadyAssigned, teacher.id)) continue;
@@ -430,7 +455,7 @@ export function generateCoverPlan(
       continue;
     }
     assignments.push(toAssignment(slot, pick));
-    working[pick.teacher.id] = (working[pick.teacher.id] ?? 0) + 1;
+    working[pick.teacher.id] = (working[pick.teacher.id] ?? 0) + coverWeight(slot.periodId);
     let set = coverDatesByTeacher.get(pick.teacher.id);
     if (!set) {
       set = new Set();
@@ -591,12 +616,13 @@ export function applyBalances(balances: CoverBalances, plan: CoverPlan): CoverBa
   const covered = new Set(plan.assignments.map(assignmentKey));
   for (const a of plan.assignments) {
     if (!absenteeCountsBalance(plan, a.absenteeId)) continue;
-    next[a.absenteeId] = (next[a.absenteeId] ?? 0) - 1;
-    next[a.coverTeacherId] = (next[a.coverTeacherId] ?? 0) + 1;
+    const w = coverWeight(a.periodId);
+    next[a.absenteeId] = (next[a.absenteeId] ?? 0) - w;
+    next[a.coverTeacherId] = (next[a.coverTeacherId] ?? 0) + w;
   }
   for (const slot of plan.slots) {
     if (!covered.has(slotKey(slot)) && absenteeCountsBalance(plan, slot.teacherId)) {
-      next[slot.teacherId] = (next[slot.teacherId] ?? 0) - 1;
+      next[slot.teacherId] = (next[slot.teacherId] ?? 0) - coverWeight(slot.periodId);
     }
   }
   return next;
@@ -607,12 +633,13 @@ export function undoBalances(balances: CoverBalances, plan: CoverPlan): CoverBal
   const covered = new Set(plan.assignments.map(assignmentKey));
   for (const a of plan.assignments) {
     if (!absenteeCountsBalance(plan, a.absenteeId)) continue;
-    next[a.absenteeId] = (next[a.absenteeId] ?? 0) + 1;
-    next[a.coverTeacherId] = (next[a.coverTeacherId] ?? 0) - 1;
+    const w = coverWeight(a.periodId);
+    next[a.absenteeId] = (next[a.absenteeId] ?? 0) + w;
+    next[a.coverTeacherId] = (next[a.coverTeacherId] ?? 0) - w;
   }
   for (const slot of plan.slots) {
     if (!covered.has(slotKey(slot)) && absenteeCountsBalance(plan, slot.teacherId)) {
-      next[slot.teacherId] = (next[slot.teacherId] ?? 0) + 1;
+      next[slot.teacherId] = (next[slot.teacherId] ?? 0) + coverWeight(slot.periodId);
     }
   }
   return next;

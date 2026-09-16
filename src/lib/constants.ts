@@ -28,12 +28,18 @@ export const EXTRA_PERIODS: PeriodDef[] = [
   { id: "p10", label: "課後", kind: "other" },
 ];
 
+export const HOMEROOM_PERIOD: PeriodDef = { id: "hr", label: "班主任節", kind: "assembly" };
+
 export const ALL_TEACHING_PERIODS = [...LESSON_PERIODS, ...EXTRA_PERIODS];
 
-/** 可編代堂嘅節次（課後 p10 同會議唔代）。星期五一般無 p9。 */
+/** 時間表列：班主任節在第一節之前 */
+export const TIMETABLE_PERIODS = [HOMEROOM_PERIOD, ...ALL_TEACHING_PERIODS];
+
+/** 可編代堂嘅正規節次（課後 p10 同會議唔代）。星期五一般無 p9。班主任節另外加。 */
 export const COVER_PERIOD_IDS = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9"] as const;
 
 export const MON_THU_TIMES: Record<string, PeriodTime> = {
+  hr: { start: "08:00", end: "08:25" },
   assembly: { start: "08:00", end: "08:25" },
   p1: { start: "08:25", end: "09:00" },
   p2: { start: "09:00", end: "09:35" },
@@ -54,6 +60,7 @@ export const MON_THU_TIMES: Record<string, PeriodTime> = {
 };
 
 export const FRI_TIMES: Record<string, PeriodTime> = {
+  hr: { start: "08:00", end: "08:15" },
   assembly: { start: "08:00", end: "08:15" },
   p1: { start: "08:15", end: "08:45" },
   p2: { start: "08:45", end: "09:15" },
@@ -110,6 +117,7 @@ export const SUBJECT_COLORS: Record<string, string> = {
   應用學習: "bg-zinc-100 text-zinc-900 border-zinc-200",
   數學延伸M1: "bg-indigo-50 text-indigo-950 border-indigo-200",
   全人教育: "bg-red-50 text-red-900 border-red-200",
+  班主任節: "bg-rose-50 text-rose-950 border-rose-200",
 };
 
 export const SUBJECT_ABBR: Record<string, string> = {
@@ -140,6 +148,7 @@ export const SUBJECT_ABBR: Record<string, string> = {
   應用學習: "應",
   數學延伸M1: "M1",
   全人教育: "全人",
+  班主任節: "班主任",
 };
 
 export const ABBR_TO_SUBJECT: Record<string, string> = Object.fromEntries(
@@ -174,5 +183,5 @@ export function dayLabel(day: DayId): string {
 }
 
 export function periodLabel(periodId: string): string {
-  return ALL_TEACHING_PERIODS.find((p) => p.id === periodId)?.label ?? periodId;
+  return TIMETABLE_PERIODS.find((p) => p.id === periodId)?.label ?? periodId;
 }

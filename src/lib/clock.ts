@@ -47,7 +47,7 @@ export function currentPeriodId(date = new Date()): string | null {
 }
 
 export function isTeachingPeriod(periodId: string | null): periodId is string {
-  return Boolean(periodId && /^p[1-9]$/.test(periodId));
+  return Boolean(periodId && (periodId === "hr" || /^p[1-9]$/.test(periodId)));
 }
 
 export { periodTime };
