@@ -2,10 +2,9 @@
 
 import type { DayId, Lesson, ScheduleData } from "@/lib/types";
 import {
-  ALL_TEACHING_PERIODS,
   DAYS,
   formatTimeRange,
-  LESSON_PERIODS,
+  TIMETABLE_PERIODS,
   periodLabel,
   subjectClass,
 } from "@/lib/constants";
@@ -25,7 +24,9 @@ export function TimetableGrid({
   emptyLabel?: string;
   showFridayP9?: boolean;
 }) {
-  const periods = showFridayP9 ? ALL_TEACHING_PERIODS : [...LESSON_PERIODS, ...ALL_TEACHING_PERIODS.filter((p) => p.id === "p9")];
+  const periods = showFridayP9
+    ? TIMETABLE_PERIODS
+    : TIMETABLE_PERIODS.filter((p) => p.id !== "p10");
   const uniquePeriods = periods.filter(
     (p, i, arr) => arr.findIndex((x) => x.id === p.id) === i,
   );

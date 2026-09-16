@@ -13,6 +13,7 @@
     "lint": "eslint",
     "seed": "tsx scripts/import-official.ts",
     "test:cover": "tsx scripts/test-cover.ts",
+    "test:homeroom": "tsx scripts/test-homeroom.ts",
     "test:swap": "tsx scripts/test-swap.ts",
     "test:calendar": "tsx scripts/test-calendar.ts",
     "test:records": "tsx scripts/test-teacher-records.ts",

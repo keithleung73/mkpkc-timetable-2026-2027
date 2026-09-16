@@ -11,6 +11,7 @@ import {
   persistAccessCode,
 } from "@/lib/site-access";
 import { SiteLockScreen } from "@/components/site-lock-screen";
+import { ensureHomeroomLessons } from "@/lib/homeroom";
 import type { ScheduleData } from "@/lib/types";
 
 type Ctx = {
@@ -36,7 +37,7 @@ const ScheduleContext = createContext<Ctx>({
 async function fetchLocalSchedule(): Promise<ScheduleData> {
   const res = await fetch(scheduleDataUrl(), { cache: "no-store" });
   if (!res.ok) throw new Error("無法載入課表");
-  return res.json() as Promise<ScheduleData>;
+  return ensureHomeroomLessons(await res.json());
 }
 
 async function fetchEncryptedSchedule(code: string): Promise<ScheduleData> {
@@ -51,7 +52,7 @@ async function fetchEncryptedSchedule(code: string): Promise<ScheduleData> {
     if (!json || !Array.isArray(json.teachers) || !Array.isArray(json.lessons)) {
       throw new SiteAccessError("課表內容不正確。", "corrupt");
     }
-    return json;
+    return ensureHomeroomLessons(json);
 }
 
 export function ScheduleProvider({ children }: { children: React.ReactNode }) {

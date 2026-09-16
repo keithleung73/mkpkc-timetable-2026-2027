@@ -30,7 +30,9 @@ import {
   previewDeltas,
   reassignCover,
   slotKey,
-  teachingLessonsOnDay,
+  formatCoverPoints,
+  coverWeight,
+  teachingLoadOnDay,
   weekdayFromIsoDate,
   type CoverBalances,
   type CoverPickContext,
@@ -305,6 +307,7 @@ function Inner() {
         </CardHeader>
         <CardContent className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
           <p>病假／事假：請假同事每堂 −1；成功代堂同事每堂 +1。未能編配嘅堂，請假人仍然扣分。</p>
+          <p>08:00 班主任節（一至四 08:00–08:25，五 08:00–08:15）都要找人代；只當 0.5 節計。若該班仍有另一位班主任在，則不用另找人。</p>
           <p>公假：仍會編代堂，但請假人同代堂人都不加減分數。</p>
           <p>病假／事假較多（結餘較負）者優先代堂，其後先睇當日原有堂數。</p>
           <p>當日原有課堂多於 {MAX_OWN_LESSONS} 節者不能代堂。</p>
@@ -484,7 +487,7 @@ function Inner() {
               ) : (
                 listed.map((t) => {
                   const checked = absentees.includes(t.id);
-                  const own = teachingLessonsOnDay(effectiveData, t.id, day).length;
+                  const own = teachingLoadOnDay(effectiveData, t.id, day);
                   const bal = balances[t.id] ?? 0;
                   return (
                     <label
@@ -793,6 +796,7 @@ function PlanTable({
                     {periodLabel(a.periodId)}
                     <div className="text-xs text-muted-foreground">
                       {formatTimeRange(plan.day, a.periodId)}
+                      {coverWeight(a.periodId) !== 1 ? ` · ${coverWeight(a.periodId)} 節` : ""}
                     </div>
                   </td>
                   <td className="px-3 py-2">
@@ -852,6 +856,7 @@ function PlanTable({
                     {periodLabel(s.periodId)}
                     <div className="text-xs text-muted-foreground">
                       {formatTimeRange(plan.day, s.periodId)}
+                      {coverWeight(s.periodId) !== 1 ? ` · ${coverWeight(s.periodId)} 節` : ""}
                     </div>
                   </td>
                   <td className="px-3 py-2">
@@ -917,7 +922,7 @@ function PlanTable({
               const t = data.teachers.find((x) => x.id === id);
               return (
                 <span key={id} className="mr-2">
-                  {t?.name ?? id} {n > 0 ? `+${n}` : n}
+                  {t?.name ?? id} {formatCoverPoints(n)}
                 </span>
               );
             })

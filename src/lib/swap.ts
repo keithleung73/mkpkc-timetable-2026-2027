@@ -4,6 +4,7 @@ import {
   periodLabel as periodLabelFromConstants,
 } from "./constants";
 import { addDaysIso, weekdayFromIsoDate } from "./cover";
+import { isHomeroomLesson } from "./homeroom";
 import { isClpSubject, isRemedialLesson, isTeachingLesson, lessonOccupiesTeacher } from "./lesson-kind";
 import { classTokenMatches, substituteCandidates } from "./queries";
 import { schoolClosedReason, swapBlockedReason } from "./school-calendar";
@@ -233,6 +234,7 @@ export function buildLeaveUnits(
     );
 
     for (const lesson of mine) {
+      if (isHomeroomLesson(lesson)) continue;
       if (isRemedialLesson(lesson)) {
         const key = `remedial|${lesson.id}|${leaveDate}`;
         if (seen.has(key)) continue;
@@ -275,6 +277,7 @@ export function buildLeaveUnits(
       .filter(
         (l) =>
           l.teacherIds.includes(teacherId) &&
+          !isHomeroomLesson(l) &&
           !isRemedialLesson(l) &&
           !lessonHasIal(l) &&
           !isBlockedElective(data, l),

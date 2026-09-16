@@ -34,6 +34,7 @@ const PDF_SUBJECT: Record<string, string> = {
 };
 
 function periodNumber(periodId: string): number {
+  if (periodId === "hr") return 0;
   const n = Number(String(periodId).replace(/^p/i, ""));
   return Number.isFinite(n) ? n : 99;
 }

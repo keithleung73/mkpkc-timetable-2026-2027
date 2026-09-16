@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ScheduleData } from "./types";
 import { generateSeed } from "./seed";
+import { ensureHomeroomLessons } from "./homeroom";
 import { buildOfficialSchedule } from "./parse-teacher-timetable";
 
 const DATA_PATH = path.join(process.cwd(), "data", "schedule.json");
@@ -28,10 +29,10 @@ export function readSchedule(): ScheduleData {
     const official = loadOfficialSchedule();
     const data = official ?? generateSeed();
     fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2), "utf8");
-    return data;
+    return ensureHomeroomLessons(data);
   }
   const raw = fs.readFileSync(DATA_PATH, "utf8");
-  return JSON.parse(raw) as ScheduleData;
+  return ensureHomeroomLessons(JSON.parse(raw) as ScheduleData);
 }
 
 export function writeSchedule(data: ScheduleData) {
@@ -44,5 +45,5 @@ export function resetSchedule(): ScheduleData {
   const data = official ?? generateSeed();
   data.meta.updatedAt = new Date().toISOString();
   writeSchedule(data);
-  return data;
+  return ensureHomeroomLessons(data);
 }
