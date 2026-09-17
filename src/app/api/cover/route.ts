@@ -76,6 +76,7 @@ export async function POST(req: Request) {
       store.balances,
       store.plans,
       body.leaveKinds,
+      store.plans.find((p) => p.date === date) ?? null,
     );
     return NextResponse.json({ plan, balances: store.balances, swaps: readSwapStore().swaps });
   }

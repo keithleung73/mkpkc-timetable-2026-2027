@@ -14,7 +14,9 @@ import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -28,6 +30,8 @@ import {
   MAX_CONSECUTIVE_COVER_DAYS,
   MAX_COVER_LOAD_PER_DAY,
   MAX_OWN_LESSONS,
+  manualCoverTeachers,
+  ownTeachingLoadOnDay,
   previewDeltas,
   reassignCover,
   slotKey,
@@ -38,6 +42,7 @@ import {
   type CoverBalances,
   type CoverPickContext,
   type CoverPlan,
+  type EligibleCover,
   type SavedCoverPlan,
 } from "@/lib/cover";
 import { dayLabel, formatTimeRange, periodLabel } from "@/lib/constants";
@@ -176,7 +181,16 @@ function Inner() {
       toast.error("請先勾選請假同事");
       return;
     }
-    const next = generateCoverPlan(effectiveData, day, date, absentees, balances, history, leaveKinds);
+    const next = generateCoverPlan(
+      effectiveData,
+      day,
+      date,
+      absentees,
+      balances,
+      history,
+      leaveKinds,
+      savedToday,
+    );
     setPlan(next);
     if (next.slots.length === 0) {
       toast.message("所選同事當日無需要代嘅堂");
@@ -311,11 +325,11 @@ function Inner() {
           <p>08:00 班主任節（一至四 08:00–08:25，五 08:00–08:15）都要找人代；只當 0.5 節計。若該班仍有另一位班主任在，則不用另找人。</p>
           <p>公假：仍會編代堂，但請假人同代堂人都不加減分數。</p>
           <p>病假／事假較多（結餘較負）者優先代堂，其後先睇當日原有堂數。</p>
-          <p>當日原有課堂多於 {MAX_OWN_LESSONS} 節者不能代堂。</p>
+          <p>當日正規課堂多於 {MAX_OWN_LESSONS} 節者不能自動代堂（08:00 班主任節唔計入呢個上限）。人手仍可指定該節得閒同事。</p>
           <p>同一人一日內代堂不能多過 {MAX_COVER_LOAD_PER_DAY} 堂（班主任節計 0.5）。</p>
           <p>學校假期、統測、考試、深度學習周、陸運會、開放日、教師發展日等無堂日無需代堂。</p>
           <p>同一人唔可以連續兩節代堂（例如代完第三節就不能代第四節）；同自己原本課堂相鄰則可以。</p>
-          <p>已確認調堂會改當日佔用：被調去上課嘅同事該節不能代堂。CLP 可以調堂（調去 CLP／空堂）；CLP 本身唔擋代堂。</p>
+          <p>已確認調堂會改當日佔用：被調去上課嘅同事該節不能代堂。已入帳／人手指定嘅代堂同樣佔用該節，之後電產生調堂或代堂唔會再派同一人同一節。CLP 可以調堂（調去 CLP／空堂）；CLP 本身唔擋代堂。</p>
           <p>
             盡量唔編：{COVER_AVOID_TEACHER_NAMES.join("、")}
             （無人可代時仍可編；亦可人手改派）。
@@ -335,9 +349,11 @@ function Inner() {
             className="w-44"
             value={date}
             onChange={(e) => {
-              setDate(e.target.value);
-              setAbsentees([]);
-              setLeaveKinds({});
+              const next = e.target.value;
+              setDate(next);
+              const saved = history.find((p) => p.date === next);
+              setAbsentees(saved ? [...saved.absentees] : []);
+              setLeaveKinds(saved?.leaveKinds ?? {});
               setPlan(null);
             }}
           />
@@ -367,9 +383,11 @@ function Inner() {
           type="button"
           variant="outline"
           onClick={() => {
-            setDate(hkTodayIso());
-            setAbsentees([]);
-            setLeaveKinds({});
+            const today = hkTodayIso();
+            setDate(today);
+            const saved = history.find((p) => p.date === today);
+            setAbsentees(saved ? [...saved.absentees] : []);
+            setLeaveKinds(saved?.leaveKinds ?? {});
             setPlan(null);
           }}
         >
@@ -389,7 +407,7 @@ function Inner() {
       {savedToday ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           呢日已有入帳方案（{savedToday.assignments.length} 堂已編、
-          {savedToday.leftover.length} 堂未編）。再確認會覆蓋當日結餘。
+          {savedToday.leftover.length} 堂未編）。再產生會保留已入帳代堂，只編新請假同事未處理嘅堂；再確認會按合併後方案更新當日結餘。
           <Button
             className="ml-3"
             size="sm"
@@ -490,6 +508,7 @@ function Inner() {
                 listed.map((t) => {
                   const checked = absentees.includes(t.id);
                   const own = teachingLoadOnDay(effectiveData, t.id, day);
+                  const regular = ownTeachingLoadOnDay(effectiveData, t.id, day);
                   const bal = balances[t.id] ?? 0;
                   return (
                     <label
@@ -515,7 +534,7 @@ function Inner() {
                         </span>
                         <span className="block text-xs text-muted-foreground">
                           當日 {own} 堂
-                          {own > MAX_OWN_LESSONS ? " · 超過 6 堂，不能代人" : ""}
+                          {regular > MAX_OWN_LESSONS ? " · 超過 6 堂正規課，不能自動代人" : ""}
                           {teacherEnglishLabels(t)[0] ? ` · ${teacherEnglishLabels(t)[0]}` : ""}
                         </span>
                       </span>
@@ -792,6 +811,15 @@ function PlanTable({
                 others,
                 pickCtx,
               );
+              const extras = manualCoverTeachers(
+                data,
+                plan.day,
+                absentees,
+                balances,
+                slot,
+                others,
+                pickCtx,
+              );
               return (
                 <tr key={key} className="border-t">
                   <td className="px-3 py-2 whitespace-nowrap">
@@ -817,25 +845,12 @@ function PlanTable({
                     ) : null}
                   </td>
                   <td className="px-3 py-2">
-                    <Select
+                    <CoverTeacherSelect
                       value={a.coverTeacherId}
-                      onValueChange={(v) => {
-                        const id = typeof v === "string" ? v : "";
-                        if (!id) return;
-                        onChange(reassignCover(data, plan, key, id, balances, history));
-                      }}
-                    >
-                      <SelectTrigger className="w-52">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {options.map((o) => (
-                          <SelectItem key={o.teacher.id} value={o.teacher.id}>
-                            {o.teacher.name}（{o.teacher.code}）{o.balance}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      options={options}
+                      extras={extras}
+                      onChange={(id) => onChange(reassignCover(data, plan, key, id, balances, history))}
+                    />
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">{a.reason}</td>
                 </tr>
@@ -844,6 +859,15 @@ function PlanTable({
             {plan.leftover.map((s) => {
               const key = slotKey(s);
               const options = eligibleCoverTeachers(
+                data,
+                plan.day,
+                absentees,
+                balances,
+                s,
+                plan.assignments,
+                pickCtx,
+              );
+              const extras = manualCoverTeachers(
                 data,
                 plan.day,
                 absentees,
@@ -877,27 +901,15 @@ function PlanTable({
                     ) : null}
                   </td>
                   <td className="px-3 py-2">
-                    {options.length === 0 ? (
+                    {options.length === 0 && extras.length === 0 ? (
                       <span className="text-xs text-destructive">無人可代</span>
                     ) : (
-                      <Select
-                        onValueChange={(v) => {
-                          const id = typeof v === "string" ? v : "";
-                          if (!id) return;
-                          onChange(reassignCover(data, plan, key, id, balances, history));
-                        }}
-                      >
-                        <SelectTrigger className="w-52">
-                          <SelectValue placeholder="人手指定" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {options.map((o) => (
-                            <SelectItem key={o.teacher.id} value={o.teacher.id}>
-                              {o.teacher.name}（{o.teacher.code}）{o.balance}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <CoverTeacherSelect
+                        options={options}
+                        extras={extras}
+                        placeholder="人手指定"
+                        onChange={(id) => onChange(reassignCover(data, plan, key, id, balances, history))}
+                      />
                     )}
                   </td>
                   <td className="px-3 py-2 text-xs text-destructive">未能自動編配</td>
@@ -941,5 +953,60 @@ function PlanTable({
         </Button>
       </div>
     </div>
+  );
+}
+
+function coverOptionLabel(o: EligibleCover) {
+  return `${o.teacher.name}（${o.teacher.code}）${o.balance}`;
+}
+
+function CoverTeacherSelect({
+  value,
+  options,
+  extras,
+  placeholder,
+  onChange,
+}: {
+  value?: string;
+  options: EligibleCover[];
+  extras: EligibleCover[];
+  placeholder?: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <Select
+      value={value}
+      onValueChange={(v) => {
+        const id = typeof v === "string" ? v : "";
+        if (!id) return;
+        onChange(id);
+      }}
+    >
+      <SelectTrigger className="w-56">
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent className="max-h-72">
+        {options.length > 0 ? (
+          <SelectGroup>
+            {extras.length > 0 ? <SelectLabel>可自動編配</SelectLabel> : null}
+            {options.map((o) => (
+              <SelectItem key={o.teacher.id} value={o.teacher.id}>
+                {coverOptionLabel(o)}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        ) : null}
+        {extras.length > 0 ? (
+          <SelectGroup>
+            <SelectLabel>人手指定（該節得閒）</SelectLabel>
+            {extras.map((o) => (
+              <SelectItem key={o.teacher.id} value={o.teacher.id}>
+                {coverOptionLabel(o)} · 人手
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        ) : null}
+      </SelectContent>
+    </Select>
   );
 }

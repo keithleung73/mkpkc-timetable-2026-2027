@@ -1,6 +1,7 @@
 import { dayLabel, periodLabel } from "./constants";
 import { addDaysIso, mondayOfWeekIso, weekdayFromIsoDate } from "./cover";
 import type { SavedCoverPlan } from "./cover";
+import { coverWeight } from "./homeroom";
 import { leaveKindLabel, type LeaveKind } from "./leave";
 import type { ConfirmedSwap } from "./swap-records";
 import { swapModeLabel } from "./swap-rules";
@@ -294,15 +295,19 @@ export function collectTeacherRecords(
 }
 
 export function summarizeTeacherRecords(rows: TeacherRecordRow[]) {
+  const covering = rows.filter((r) => r.role === "cover");
+  const absentee = rows.filter((r) => r.role === "absentee");
   return {
     total: rows.length,
     swap: rows.filter((r) => r.kind === "swap").length,
     cover: rows.filter((r) => r.kind === "cover").length,
     leave: rows.filter((r) => r.role === "leave").length,
     partner: rows.filter((r) => r.role === "partner").length,
-    absentee: rows.filter((r) => r.role === "absentee").length,
-    covering: rows.filter((r) => r.role === "cover").length,
+    absentee: absentee.length,
+    covering: covering.length,
     uncovered: rows.filter((r) => r.role === "uncovered").length,
+    coveringPeriods: covering.reduce((sum, r) => sum + coverWeight(r.periodId), 0),
+    absenteePeriods: absentee.reduce((sum, r) => sum + coverWeight(r.periodId), 0),
   };
 }
 
@@ -315,6 +320,7 @@ export function teacherRecordSheetRows(rows: TeacherRecordRow[]): string[][] {
     "角色",
     "請假種類",
     "節次",
+    "代堂節數",
     "科目",
     "班",
     "對手",
@@ -330,6 +336,7 @@ export function teacherRecordSheetRows(rows: TeacherRecordRow[]): string[][] {
       r.roleLabel,
       r.leaveKind ? leaveKindLabel(r.leaveKind) : "",
       r.periodText,
+      r.kind === "cover" ? String(coverWeight(r.periodId)) : "",
       r.subjects.join("、"),
       r.classIds.join("、"),
       r.counterpartName,

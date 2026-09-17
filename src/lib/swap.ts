@@ -3,12 +3,24 @@ import {
   isCoreSubject,
   periodLabel as periodLabelFromConstants,
 } from "./constants";
-import { addDaysIso, weekdayFromIsoDate } from "./cover";
+import {
+  absenteesOnDate,
+  applyConfirmedCovers,
+  buildCoverDatesByTeacher,
+  coverPlanOnDate,
+  eligibleCoverTeachers,
+  weekdayFromIsoDate,
+  type CoverAssignment,
+  type CoverBalances,
+  type CoverPlan,
+  type CoverSlot,
+  addDaysIso,
+} from "./cover";
 import { isHomeroomLesson } from "./homeroom";
 import { isClpSubject, isRemedialLesson, isTeachingLesson, lessonOccupiesTeacher } from "./lesson-kind";
-import { classTokenMatches, substituteCandidates } from "./queries";
+import { classTokenMatches } from "./queries";
 import { schoolClosedReason, swapBlockedReason } from "./school-calendar";
-import { resolveDateForWeekday, swapSearchDates } from "./swap-records";
+import { applyConfirmedSwaps, resolveDateForWeekday, swapSearchDates, type ConfirmedSwap } from "./swap-records";
 import {
   adjacentPeriodPairs,
   isPthDramaPair,
@@ -64,6 +76,12 @@ export type CoverSuggestion = {
   sameSubject: boolean;
   teachesClass: boolean;
   lessonsToday: number;
+};
+
+export type LeavePlanContext = {
+  swaps?: ConfirmedSwap[];
+  coverPlans?: CoverPlan[];
+  balances?: CoverBalances;
 };
 
 export type SwapUnitResult = {
@@ -686,47 +704,102 @@ function findIalBundleSwaps(
   return matches;
 }
 
+function teachesClassOf(data: ScheduleData, teacherId: string, classIds: string[]) {
+  if (classIds.length === 0) return false;
+  return data.lessons.some(
+    (l) => l.teacherIds.includes(teacherId) && l.classIds.some((id) => classIds.includes(id)),
+  );
+}
+
 function coverForUnit(
   data: ScheduleData,
   unit: SwapUnit,
   leaveTeacherId: string,
+  alreadyAssigned: CoverAssignment[] = [],
+  extraAbsentees: Set<string> = new Set(),
+  balances: CoverBalances = {},
+  pickCtx?: { date: string; coverDatesByTeacher: Map<string, Set<string>> },
 ): CoverSuggestion[] {
+  const absentees = new Set(extraAbsentees);
+  absentees.add(leaveTeacherId);
   const out = new Map<string, CoverSuggestion>();
   for (const lesson of unit.lessons) {
     if (!lesson.teacherIds.includes(leaveTeacherId)) continue;
-    const classId = lesson.classIds[0];
-    const cands = substituteCandidates(data, unit.day, unit.periodId, {
-      classId,
+    const slot: CoverSlot = {
+      periodId: unit.periodId,
+      classIds: [...lesson.classIds],
       subject: lesson.subject,
-    }).filter((c) => c.teacher.id !== leaveTeacherId);
+      roomId: lesson.roomId,
+      teacherId: leaveTeacherId,
+      teacherName: teacherName(data, leaveTeacherId),
+    };
+    const cands = eligibleCoverTeachers(
+      data,
+      unit.day,
+      absentees,
+      balances,
+      slot,
+      alreadyAssigned,
+      pickCtx,
+    );
 
-    for (const c of cands.slice(0, 6)) {
+    for (const c of cands) {
+      const sameSubject = c.teacher.subjects.includes(lesson.subject);
+      const teachesClass = teachesClassOf(data, c.teacher.id, lesson.classIds);
       const prev = out.get(c.teacher.id);
       if (
         !prev ||
-        Number(c.sameSubject) + Number(c.teachesClass) >
+        Number(sameSubject) + Number(teachesClass) >
           Number(prev.sameSubject) + Number(prev.teachesClass)
       ) {
         out.set(c.teacher.id, {
           teacherId: c.teacher.id,
           teacherName: c.teacher.name,
           teacherCode: c.teacher.code,
-          sameSubject: c.sameSubject,
-          teachesClass: c.teachesClass,
-          lessonsToday: c.lessonsToday,
+          sameSubject,
+          teachesClass,
+          lessonsToday: c.ownLessons,
         });
       }
     }
   }
-  return [...out.values()]
-    .sort(
-      (a, b) =>
-        Number(b.sameSubject) - Number(a.sameSubject) ||
-        Number(b.teachesClass) - Number(a.teachesClass) ||
-        a.lessonsToday - b.lessonsToday ||
-        a.teacherName.localeCompare(b.teacherName, "zh-Hant"),
-    )
-    .slice(0, 8);
+  return [...out.values()].sort(
+    (a, b) =>
+      Number(b.sameSubject) - Number(a.sameSubject) ||
+      Number(b.teachesClass) - Number(a.teachesClass) ||
+      a.lessonsToday - b.lessonsToday ||
+      a.teacherName.localeCompare(b.teacherName, "zh-Hant"),
+  );
+}
+
+function teacherCoveringPeriod(
+  plans: CoverPlan[],
+  date: string,
+  teacherId: string,
+  periodId: string,
+) {
+  const plan = coverPlanOnDate(plans, date);
+  return (
+    plan?.assignments.some((a) => a.coverTeacherId === teacherId && a.periodId === periodId) ?? false
+  );
+}
+
+function swapMatchBlockedByCover(
+  match: SwapMatch,
+  unit: SwapUnit,
+  ctx?: LeavePlanContext,
+): boolean {
+  const plans = ctx?.coverPlans ?? [];
+  const swaps = ctx?.swaps ?? [];
+  const leaveAbs = absenteesOnDate(unit.leaveDate, plans, swaps);
+  const partnerAbs = absenteesOnDate(match.partnerDate, plans, swaps);
+  return match.partnerTeacherIds.some(
+    (id) =>
+      leaveAbs.has(id) ||
+      partnerAbs.has(id) ||
+      teacherCoveringPeriod(plans, unit.leaveDate, id, unit.periodId) ||
+      teacherCoveringPeriod(plans, match.partnerDate, id, match.partnerPeriodId),
+  );
 }
 
 export function planTeacherLeaveSwaps(
@@ -734,6 +807,7 @@ export function planTeacherLeaveSwaps(
   teacherId: string,
   leaveDates: string[],
   swapFromDate: string,
+  ctx?: LeavePlanContext,
 ): SwapPlan {
   const teacher = data.teachers.find((t) => t.id === teacherId);
   const teacherName = teacher?.name ?? teacherId;
@@ -750,6 +824,27 @@ export function planTeacherLeaveSwaps(
   }
   const units = buildLeaveUnits(data, teacherId, teachingLeave);
   const searchDates = swapSearchDates(swapFromDate, leaveDates);
+  const coverPlans = ctx?.coverPlans ?? [];
+  const confirmedSwaps = ctx?.swaps ?? [];
+  const balances = ctx?.balances ?? {};
+
+  const coversFor = (unit: SwapUnit) => {
+    const dayData = applyConfirmedCovers(
+      applyConfirmedSwaps(data, unit.leaveDate, confirmedSwaps),
+      unit.leaveDate,
+      coverPlans,
+    );
+    const already = coverPlanOnDate(coverPlans, unit.leaveDate)?.assignments ?? [];
+    const extraAbs = absenteesOnDate(unit.leaveDate, coverPlans, confirmedSwaps);
+    extraAbs.add(teacherId);
+    return coverForUnit(dayData, unit, teacherId, already, extraAbs, balances, {
+      date: unit.leaveDate,
+      coverDatesByTeacher: buildCoverDatesByTeacher(coverPlans, unit.leaveDate),
+    });
+  };
+
+  const filterSwaps = (unit: SwapUnit, matches: SwapMatch[]) =>
+    matches.filter((m) => !swapMatchBlockedByCover(m, unit, ctx)).slice(0, MAX_SWAP_OPTIONS);
 
   const results: SwapUnitResult[] = units.map((unit) => {
     const calendarBlock = swapBlockedReason(unit.leaveDate);
@@ -757,7 +852,7 @@ export function planTeacherLeaveSwaps(
       return {
         unit,
         status: "blocked" as const,
-        coverSuggestions: coverForUnit(data, unit, teacherId),
+        coverSuggestions: coversFor(unit),
         blockers: [calendarBlock],
       };
     }
@@ -766,7 +861,7 @@ export function planTeacherLeaveSwaps(
       return {
         unit,
         status: "blocked" as const,
-        coverSuggestions: coverForUnit(data, unit, teacherId),
+        coverSuggestions: coversFor(unit),
         blockers: [
           "高中選修／分組時段：同一班同一時段仍有其他課（例如中史、歷史、企會財、化學等並行），不能單獨調堂。",
         ],
@@ -777,13 +872,13 @@ export function planTeacherLeaveSwaps(
       return {
         unit,
         status: "blocked" as const,
-        coverSuggestions: coverForUnit(data, unit, teacherId),
+        coverSuggestions: coversFor(unit),
         blockers: ["重摘課不能調堂。"],
       };
     }
 
     if (unit.kind === "subject_pair") {
-      const pairSwaps = findSubjectPairSwaps(data, unit, teacherId, searchDates);
+      const pairSwaps = filterSwaps(unit, findSubjectPairSwaps(data, unit, teacherId, searchDates));
       if (pairSwaps.length > 0) {
         return {
           unit,
@@ -797,7 +892,7 @@ export function planTeacherLeaveSwaps(
       return {
         unit,
         status: "cover" as const,
-        coverSuggestions: coverForUnit(data, unit, teacherId),
+        coverSuggestions: coversFor(unit),
         blockers: ["搵唔到可一拼對調嘅同一科兩堂（對方連堂、雙方得閒、課室無人用）。"],
       };
     }
@@ -807,7 +902,7 @@ export function planTeacherLeaveSwaps(
         ? findIalBundleSwaps(data, unit, teacherId, searchDates)
         : findNormalSwaps(data, unit, teacherId, searchDates);
     const rotate = unit.kind === "normal" ? findSplitRotateSwap(data, unit, teacherId) : null;
-    const swaps = rotate ? [rotate, ...found].slice(0, MAX_SWAP_OPTIONS) : found;
+    const swaps = filterSwaps(unit, rotate ? [rotate, ...found] : found);
 
     if (swaps.length > 0) {
       return {
@@ -815,7 +910,7 @@ export function planTeacherLeaveSwaps(
         status: "swap" as const,
         swap: swaps[0],
         swaps,
-        coverSuggestions: coverForUnit(data, unit, teacherId),
+        coverSuggestions: coversFor(unit),
         blockers: [],
       };
     }
@@ -830,7 +925,7 @@ export function planTeacherLeaveSwaps(
     return {
       unit,
       status: "cover" as const,
-      coverSuggestions: coverForUnit(data, unit, teacherId),
+      coverSuggestions: coversFor(unit),
       blockers,
     };
   });

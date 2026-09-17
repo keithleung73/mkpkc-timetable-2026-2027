@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { hkTodayIso, type SavedCoverPlan } from "@/lib/cover";
+import { formatCoverPoints } from "@/lib/homeroom";
 import { leaveKindLabel } from "@/lib/leave";
 import { classNames } from "@/lib/queries";
 import { coverRequest, swapRequest } from "@/lib/web-ops";
@@ -251,8 +252,8 @@ function TeacherRecordsInner() {
         <Badge variant="outline">合共 {summary.total} 項</Badge>
         <Badge variant="outline">調堂 {summary.swap}</Badge>
         <Badge variant="outline">代堂 {summary.cover}</Badge>
-        <Badge variant="outline">請假被代 {summary.absentee}</Badge>
-        <Badge variant="outline">代人上堂 {summary.covering}</Badge>
+        <Badge variant="outline">請假被代 {summary.absentee}（{formatCoverPoints(summary.absenteePeriods).replace(/^\+/, "")} 節）</Badge>
+        <Badge variant="outline">代人上堂 {summary.covering}（{formatCoverPoints(summary.coveringPeriods).replace(/^\+/, "")} 節）</Badge>
         {summary.uncovered > 0 ? <Badge variant="outline">未編配 {summary.uncovered}</Badge> : null}
       </div>
 

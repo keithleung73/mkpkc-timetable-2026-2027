@@ -11,6 +11,7 @@ import {
   swapConflicts,
   type ConfirmedSwap,
 } from "@/lib/swap-records";
+import { readCoverStore } from "@/lib/cover-store";
 import { addConfirmedSwap, readSwapStore, removeConfirmedSwap, writeConfirmedSwaps } from "@/lib/swap-store";
 
 export async function GET() {
@@ -71,7 +72,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "搵唔到呢位老師" }, { status: 404 });
     }
 
-    const plan = planTeacherLeaveSwaps(data, teacherId, leaveDates, swapFromDate);
+    const coverStore = readCoverStore();
+    const plan = planTeacherLeaveSwaps(data, teacherId, leaveDates, swapFromDate, {
+      swaps: readSwapStore().swaps,
+      coverPlans: coverStore.plans,
+      balances: coverStore.balances,
+    });
     return NextResponse.json({ plan, swaps: readSwapStore().swaps });
   }
 

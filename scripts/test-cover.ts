@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import {
   applyBalances,
+  applyConfirmedCovers,
   eligibleCoverTeachers,
   generateCoverPlan,
+  manualCoverTeachers,
   mergeCoverSlotIntoPlan,
   MAX_COVER_LOAD_PER_DAY,
   MAX_OWN_LESSONS,
   undoBalances,
+  validateCoverPlan,
   weekdayFromIsoDate,
   wouldExceedConsecutiveCoverDays,
   buildCoverDatesByTeacher,
@@ -356,6 +359,107 @@ const F = teacher("F", "己");
   const after = applyBalances({}, merged);
   assert.equal(after.A ?? 0, 0);
   assert.equal(after.B ?? 0, 0);
+}
+
+{
+  const six = Array.from({ length: MAX_OWN_LESSONS }, (_, i) =>
+    lesson(`b-${i}`, "mon", `p${i === 5 ? 8 : i + 1}`, "B"),
+  );
+  const data = schedule(
+    [A, B],
+    [
+      lesson("hr", "mon", "hr", "B", { subject: "班主任節", classIds: ["1B"] }),
+      ...six,
+      lesson("abs-p6", "mon", "p6", "A"),
+    ],
+  );
+  const list = eligibleCoverTeachers(
+    data,
+    "mon",
+    new Set(["A"]),
+    { B: 0 },
+    {
+      periodId: "p6",
+      classIds: ["1A"],
+      subject: "數學",
+      roomId: "201",
+      teacherId: "A",
+      teacherName: "甲",
+    },
+    [],
+  );
+  assert.ok(list.some((x) => x.teacher.id === "B"), "6 堂正規課加班主任節仍可代人");
+}
+
+{
+  const seven = Array.from({ length: MAX_OWN_LESSONS + 1 }, (_, i) =>
+    lesson(`c-${i}`, "mon", `p${i === 5 ? 8 : i + 1}`, "C"),
+  );
+  const data = schedule(
+    [A, C],
+    [...seven, lesson("abs-p6", "mon", "p6", "A")],
+  );
+  const slot = {
+    periodId: "p6",
+    classIds: ["1A"],
+    subject: "數學",
+    roomId: "201",
+    teacherId: "A",
+    teacherName: "甲",
+  };
+  const auto = eligibleCoverTeachers(data, "mon", new Set(["A"]), { C: -4 }, slot, []);
+  assert.ok(!auto.some((x) => x.teacher.id === "C"), "7 堂正規課不能自動代");
+  const manual = manualCoverTeachers(data, "mon", new Set(["A"]), { C: -4 }, slot, []);
+  assert.ok(manual.some((x) => x.teacher.id === "C"), "該節得閒仍可人手指定");
+}
+
+{
+  const data = schedule(
+    [A, B, C],
+    [
+      lesson("a-p6", "wed", "p6", "A", { classIds: ["1A"] }),
+      lesson("c-p6", "wed", "p6", "C", { classIds: ["1B"] }),
+    ],
+  );
+  const seeded = mergeCoverSlotIntoPlan(data, null, "2026-09-02", "wed", "A", "p6", "B", "sick");
+  assert.ok(!("error" in seeded));
+  if ("error" in seeded) throw new Error(String(seeded.error));
+  const again = generateCoverPlan(data, "wed", "2026-09-02", ["C"], { B: -9, C: 0 }, [], { C: "sick" }, seeded);
+  const bSlots = again.assignments.filter((x) => x.coverTeacherId === "B");
+  assert.equal(bSlots.length, 1, "人手已指定 B 代第六節後，不能再派 B 代另一班第六節");
+  assert.equal(bSlots[0]?.absenteeId, "A");
+  assert.ok(
+    again.assignments.some((x) => x.absenteeId === "A" && x.coverTeacherId === "B"),
+    "人手代堂要保留並入帳",
+  );
+  const occupied = applyConfirmedCovers(data, "2026-09-02", [seeded]);
+  const occupiedIds = occupied.lessons.filter((l) => l.teacherIds.includes("B") && l.periodId === "p6");
+  assert.ok(occupiedIds.some((l) => l.id.startsWith("cover:")), "已入帳代堂要佔用該節");
+
+  const withB = {
+    ...again,
+    leftover: [],
+    assignments: [
+      {
+        periodId: "p6",
+        classIds: ["1B"],
+        subject: "數學",
+        roomId: "201",
+        absenteeId: "C",
+        absenteeName: "丙",
+        coverTeacherId: "B",
+        coverTeacherName: "乙",
+        coverBalanceBefore: 0,
+        reason: "人手指定",
+      },
+    ],
+    slots: again.slots.filter((s) => s.teacherId === "C"),
+    absentees: ["C"],
+  };
+  assert.equal(validateCoverPlan(data, withB, {}), null, "人手指定只要該節得閒就可以入帳");
+  const counted = applyBalances({}, withB);
+  assert.equal(counted.B, 1, "人手代堂要計節數");
+  assert.equal(counted.C, -1);
 }
 
 void (async () => {

@@ -115,14 +115,17 @@ const plan: SavedCoverPlan = {
   const names = new Set(all.map((r) => r.teacherId));
   assert.ok(names.has("振") && names.has("鍵") && names.has("蕭"));
 
-  const sheet = teacherRecordSheetRows(振);
-  assert.equal(sheet[0]?.[0], "老師");
-  assert.ok(sheet.some((line) => line.includes("陳振華") && line.includes("調堂")));
-
   const sum = summarizeTeacherRecords(振);
   assert.ok(sum.total === 振.length);
   assert.ok(sum.absentee >= 1);
   assert.ok(sum.uncovered >= 1);
+  assert.equal(sum.absenteePeriods, 1);
+  const 鍵Sum = summarizeTeacherRecords(鍵);
+  assert.equal(鍵Sum.coveringPeriods, 1);
+  const sheet = teacherRecordSheetRows(振);
+  assert.equal(sheet[0]?.[0], "老師");
+  assert.ok(sheet[0]?.includes("代堂節數"));
+  assert.ok(sheet.some((line) => line.includes("陳振華") && line.includes("調堂")));
 }
 
 console.log("teacher records query ok");

@@ -187,6 +187,58 @@ export function teachingLoadOnDay(data: ScheduleData, teacherId: string, day: Da
   return teachingLessonsOnDay(data, teacherId, day).reduce((sum, l) => sum + coverWeight(l.periodId), 0);
 }
 
+/** 當日正規課堂節數（班主任節唔計入「超過 6 堂不能代人」上限） */
+export function ownTeachingLoadOnDay(data: ScheduleData, teacherId: string, day: DayId) {
+  return teachingLessonsOnDay(data, teacherId, day).filter((l) => !isHomeroomLesson(l)).length;
+}
+
+export function absenteesOnDate(
+  date: string,
+  plans: { date: string; absentees?: string[] }[] = [],
+  swaps: { leaveDate: string; leaveTeacherId: string }[] = [],
+): Set<string> {
+  const ids = new Set<string>();
+  for (const plan of plans) {
+    if (plan.date !== date) continue;
+    for (const id of plan.absentees ?? []) ids.add(id);
+  }
+  for (const swap of swaps) {
+    if (swap.leaveDate === date) ids.add(swap.leaveTeacherId);
+  }
+  return ids;
+}
+
+export function coverPlanOnDate<T extends { date: string }>(plans: T[], date: string): T | null {
+  return plans.find((p) => p.date === date) ?? null;
+}
+
+/** 已確認代堂佔用該節，避免同一人同一節再被編去另一班。 */
+export function applyConfirmedCovers(
+  data: ScheduleData,
+  date: string,
+  plans: CoverPlan[],
+): ScheduleData {
+  const plan = coverPlanOnDate(plans, date);
+  if (!plan || plan.assignments.length === 0) return data;
+  const added: Lesson[] = [];
+  for (const a of plan.assignments) {
+    if (isOccupied(data, a.coverTeacherId, plan.day, a.periodId)) continue;
+    added.push({
+      id: `cover:${plan.date}:${a.periodId}:${a.coverTeacherId}:${a.absenteeId}:${[...a.classIds].sort().join(",")}`,
+      day: plan.day,
+      periodId: a.periodId,
+      classIds: [],
+      teacherIds: [a.coverTeacherId],
+      subject: "代堂",
+      roomId: a.roomId,
+      kind: "lesson",
+      note: `代 ${a.absenteeName}`,
+    });
+  }
+  if (added.length === 0) return data;
+  return { ...data, lessons: [...data.lessons, ...added] };
+}
+
 export function slotKey(s: {
   periodId: string;
   teacherId: string;
@@ -309,7 +361,54 @@ export type EligibleCover = {
   avoidPreferred: boolean;
   /** 今日再代會令同一星期連續代堂超過上限 */
   consecutiveDayRisk: boolean;
+  /** 人手指定：唔符合自動編配（例如原有堂數較多／連堂）但仍可代 */
+  manualOnly?: boolean;
 };
+
+function takenCoverIdsThisPeriod(alreadyAssigned: CoverAssignment[], periodId: string) {
+  return new Set(alreadyAssigned.filter((a) => a.periodId === periodId).map((a) => a.coverTeacherId));
+}
+
+/** 硬限制：請假、該節已有課／已代、一日代堂超過兩堂。人手指定都要守。 */
+export function coverHardBlockReason(
+  data: ScheduleData,
+  day: DayId,
+  absentees: Set<string>,
+  slot: CoverSlot,
+  alreadyAssigned: CoverAssignment[],
+  teacherId: string,
+): string | null {
+  if (absentees.has(teacherId)) return "請假同事不能代堂";
+  if (teacherId === slot.teacherId) return "請假同事不能代自己";
+  if (takenCoverIdsThisPeriod(alreadyAssigned, slot.periodId).has(teacherId)) {
+    return "該節已代另一堂";
+  }
+  if (isOccupied(data, teacherId, day, slot.periodId)) return "該節有課，不能代堂";
+  if (wouldExceedDailyCoverLoad(alreadyAssigned, teacherId, slot.periodId)) {
+    return "同一日代堂不能多過兩堂";
+  }
+  return null;
+}
+
+function toEligibleCover(
+  data: ScheduleData,
+  day: DayId,
+  balances: CoverBalances,
+  teacher: Teacher,
+  ctx: CoverPickContext | undefined,
+  manualOnly: boolean,
+): EligibleCover {
+  return {
+    teacher,
+    balance: balances[teacher.id] ?? 0,
+    ownLessons: ownTeachingLoadOnDay(data, teacher.id, day),
+    avoidPreferred: isCoverAvoidTeacher(teacher),
+    consecutiveDayRisk: ctx
+      ? wouldExceedConsecutiveCoverDays(teacher.id, ctx.date, ctx.coverDatesByTeacher)
+      : false,
+    manualOnly,
+  };
+}
 
 export function eligibleCoverTeachers(
   data: ScheduleData,
@@ -320,30 +419,13 @@ export function eligibleCoverTeachers(
   alreadyAssigned: CoverAssignment[],
   ctx?: CoverPickContext,
 ): EligibleCover[] {
-  const takenThisPeriod = new Set(
-    alreadyAssigned.filter((a) => a.periodId === slot.periodId).map((a) => a.coverTeacherId),
-  );
-
   const out: EligibleCover[] = [];
   for (const teacher of data.teachers) {
-    if (absentees.has(teacher.id)) continue;
-    if (takenThisPeriod.has(teacher.id)) continue;
-    const own = teachingLoadOnDay(data, teacher.id, day);
+    if (coverHardBlockReason(data, day, absentees, slot, alreadyAssigned, teacher.id)) continue;
+    const own = ownTeachingLoadOnDay(data, teacher.id, day);
     if (own > MAX_OWN_LESSONS) continue;
-    if (isOccupied(data, teacher.id, day, slot.periodId)) continue;
-    if (wouldExceedDailyCoverLoad(alreadyAssigned, teacher.id, slot.periodId)) continue;
     if (consecutiveCoverViolation(day, slot.periodId, alreadyAssigned, teacher.id)) continue;
-    const avoidPreferred = isCoverAvoidTeacher(teacher);
-    const consecutiveDayRisk = ctx
-      ? wouldExceedConsecutiveCoverDays(teacher.id, ctx.date, ctx.coverDatesByTeacher)
-      : false;
-    out.push({
-      teacher,
-      balance: balances[teacher.id] ?? 0,
-      ownLessons: own,
-      avoidPreferred,
-      consecutiveDayRisk,
-    });
+    out.push(toEligibleCover(data, day, balances, teacher, ctx, false));
   }
 
   // 1) 避開指定同事  2) 避免連續代堂超兩日  3) 負數結餘（病假／請假較多）優先  4) 當日堂數
@@ -355,6 +437,34 @@ export function eligibleCoverTeachers(
       return Number(a.consecutiveDayRisk) - Number(b.consecutiveDayRisk);
     }
     if (a.balance !== b.balance) return a.balance - b.balance;
+    if (a.ownLessons !== b.ownLessons) return a.ownLessons - b.ownLessons;
+    return a.teacher.name.localeCompare(b.teacher.name, "zh-Hant");
+  });
+  return out;
+}
+
+/** 人手指定名單：該節得閒、未代過該節、未超過一日兩堂。可越過自動編配嘅 6 堂／連堂限制。 */
+export function manualCoverTeachers(
+  data: ScheduleData,
+  day: DayId,
+  absentees: Set<string>,
+  balances: CoverBalances,
+  slot: CoverSlot,
+  alreadyAssigned: CoverAssignment[],
+  ctx?: CoverPickContext,
+): EligibleCover[] {
+  const autoIds = new Set(
+    eligibleCoverTeachers(data, day, absentees, balances, slot, alreadyAssigned, ctx).map(
+      (x) => x.teacher.id,
+    ),
+  );
+  const out: EligibleCover[] = [];
+  for (const teacher of data.teachers) {
+    if (autoIds.has(teacher.id)) continue;
+    if (coverHardBlockReason(data, day, absentees, slot, alreadyAssigned, teacher.id)) continue;
+    out.push(toEligibleCover(data, day, balances, teacher, ctx, true));
+  }
+  out.sort((a, b) => {
     if (a.ownLessons !== b.ownLessons) return a.ownLessons - b.ownLessons;
     return a.teacher.name.localeCompare(b.teacher.name, "zh-Hant");
   });
@@ -448,23 +558,54 @@ export function generateCoverPlan(
   balances: CoverBalances,
   recentPlans: CoverHistoryPlan[] = [],
   leaveKinds?: Record<string, LeaveKind>,
+  seed?: CoverPlan | null,
 ): CoverPlan {
-  const uniqueAbs = [...new Set(absenteeIds.filter(Boolean))];
+  const seedSameDay = seed && seed.date === date ? seed : null;
+  const uniqueAbs = [...new Set([...absenteeIds, ...(seedSameDay?.absentees ?? [])].filter(Boolean))];
   const absentees = new Set(uniqueAbs);
   const slots = slotsToCover(data, day, uniqueAbs);
+  const expectedKeys = new Set(slots.map(slotKey));
   const coverDatesByTeacher = buildCoverDatesByTeacher(recentPlans, date);
   const ctx: CoverPickContext = { date, coverDatesByTeacher };
 
-  const remaining = [...slots].sort((a, b) => {
-    const sa = scarcityScore(data, day, absentees, balances, a, ctx);
-    const sb = scarcityScore(data, day, absentees, balances, b, ctx);
-    if (sa !== sb) return sa - sb;
-    return periodIndex(day, a.periodId) - periodIndex(day, b.periodId);
-  });
-
   const assignments: CoverAssignment[] = [];
+  if (seedSameDay) {
+    for (const a of seedSameDay.assignments) {
+      if (!expectedKeys.has(assignmentKey(a))) continue;
+      if (coverHardBlockReason(data, day, absentees, {
+        periodId: a.periodId,
+        classIds: a.classIds,
+        subject: a.subject,
+        roomId: a.roomId,
+        teacherId: a.absenteeId,
+        teacherName: a.absenteeName,
+      }, assignments, a.coverTeacherId)) {
+        continue;
+      }
+      assignments.push(a);
+    }
+  }
+
   const leftover: CoverSlot[] = [];
   const working: CoverBalances = { ...balances };
+  for (const a of assignments) {
+    working[a.coverTeacherId] = (working[a.coverTeacherId] ?? 0) + coverWeight(a.periodId);
+    let set = coverDatesByTeacher.get(a.coverTeacherId);
+    if (!set) {
+      set = new Set();
+      coverDatesByTeacher.set(a.coverTeacherId, set);
+    }
+    set.add(date);
+  }
+
+  const remaining = slots
+    .filter((s) => !assignments.some((a) => assignmentKey(a) === slotKey(s)))
+    .sort((a, b) => {
+      const sa = scarcityScore(data, day, absentees, balances, a, ctx);
+      const sb = scarcityScore(data, day, absentees, balances, b, ctx);
+      if (sa !== sb) return sa - sb;
+      return periodIndex(day, a.periodId) - periodIndex(day, b.periodId);
+    });
 
   for (const slot of remaining) {
     const pick = pickCoverTeacher(data, day, absentees, working, slot, assignments, ctx);
@@ -486,7 +627,10 @@ export function generateCoverPlan(
     day,
     date,
     absentees: uniqueAbs,
-    leaveKinds: leaveKindsForAbsentees(uniqueAbs, leaveKinds),
+    leaveKinds: leaveKindsForAbsentees(uniqueAbs, {
+      ...(seedSameDay?.leaveKinds ?? {}),
+      ...(leaveKinds ?? {}),
+    }),
     slots,
     assignments: sortByPeriod(day, assignments),
     leftover: sortByPeriod(day, leftover),
@@ -515,16 +659,26 @@ export function mergeCoverSlotIntoPlan(
   if (targetSlots.length === 0) {
     return { error: "該節無需代堂（可能已調走或當日無課）" };
   }
-  if (isOccupied(data, coverTeacherId, day, periodId)) {
-    return { error: `${coverTeacher.name} 該節有課，不能代堂` };
-  }
-
   const keep = (existing?.assignments ?? []).filter(
     (a) => !(a.absenteeId === absenteeId && a.periodId === periodId),
   );
-  if (keep.some((a) => a.coverTeacherId === coverTeacherId && a.periodId === periodId)) {
-    return { error: `${coverTeacher.name} 該節已代另一堂` };
-  }
+  const probe: CoverSlot = {
+    periodId,
+    classIds: targetSlots[0]?.classIds ?? [],
+    subject: targetSlots[0]?.subject ?? "",
+    roomId: targetSlots[0]?.roomId ?? "",
+    teacherId: absenteeId,
+    teacherName: absentee.name,
+  };
+  const blocked = coverHardBlockReason(
+    data,
+    day,
+    new Set(absentees),
+    probe,
+    keep,
+    coverTeacherId,
+  );
+  if (blocked) return { error: `${coverTeacher.name} ${blocked}` };
 
   const newAssignments = targetSlots.map((slot) =>
     toAssignment(slot, {
@@ -572,10 +726,17 @@ export function reassignCover(
     coverDatesByTeacher: buildCoverDatesByTeacher(recentPlans, plan.date),
   };
   const list = eligibleCoverTeachers(data, plan.day, absentees, balances, slot, others, ctx);
-  const pick = list.find((x) => x.teacher.id === newTeacherId);
+  const pick =
+    list.find((x) => x.teacher.id === newTeacherId) ??
+    manualCoverTeachers(data, plan.day, absentees, balances, slot, others, ctx).find(
+      (x) => x.teacher.id === newTeacherId,
+    );
   if (!pick) return plan;
 
-  const nextAssignment = toAssignment(slot, { ...pick, reason: pickReason(pick) });
+  const nextAssignment = toAssignment(slot, {
+    ...pick,
+    reason: pick.manualOnly ? `人手指定，當日原有 ${pick.ownLessons} 堂` : pickReason(pick),
+  });
   const assignments = sortByPeriod(plan.day, [...others, nextAssignment]);
   const leftover = sortByPeriod(
     plan.day,
@@ -607,7 +768,6 @@ export function validateCoverPlan(
     if (seen.has(key)) return "同一堂重複編配";
     seen.add(key);
     if (!expectedKeys.has(key)) return "編配咗唔存在嘅堂次";
-    if (absentees.has(a.coverTeacherId)) return "請假同事不能代堂";
     const slot: CoverSlot = {
       periodId: a.periodId,
       classIds: a.classIds,
@@ -616,10 +776,10 @@ export function validateCoverPlan(
       teacherId: a.absenteeId,
       teacherName: a.absenteeName,
     };
-    const ok = eligibleCoverTeachers(data, plan.day, absentees, balances, slot, soFar).some(
-      (x) => x.teacher.id === a.coverTeacherId,
-    );
-    if (!ok) return `${a.coverTeacherName} 唔符合代堂規則（${periodLabelFromConstants(a.periodId)}）`;
+    const blocked = coverHardBlockReason(data, plan.day, absentees, slot, soFar, a.coverTeacherId);
+    if (blocked) {
+      return `${a.coverTeacherName} 唔符合代堂規則（${periodLabelFromConstants(a.periodId)}：${blocked}）`;
+    }
     soFar.push(a);
   }
   return null;

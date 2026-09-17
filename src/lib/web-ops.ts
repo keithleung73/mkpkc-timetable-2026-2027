@@ -93,7 +93,12 @@ export function localSwapPost(data: ScheduleData, body: SwapBody) {
       return fail("請假日期只能係星期一至五");
     }
     if (!data.teachers.some((t) => t.id === teacherId)) return fail("搵唔到呢位老師");
-    const plan = planTeacherLeaveSwaps(data, teacherId, leaveDates, swapFromDate);
+    const coverStore = loadCoverStore();
+    const plan = planTeacherLeaveSwaps(data, teacherId, leaveDates, swapFromDate, {
+      swaps: loadSwapStore().swaps,
+      coverPlans: coverStore.plans,
+      balances: coverStore.balances,
+    });
     return { plan, swaps: loadSwapStore().swaps };
   }
 
@@ -215,6 +220,7 @@ export function localCoverPost(data: ScheduleData, body: CoverBody) {
       store.balances,
       store.plans,
       body.leaveKinds,
+      store.plans.find((p) => p.date === date) ?? null,
     );
     return { plan, balances: store.balances, swaps: loadSwapStore().swaps };
   }
