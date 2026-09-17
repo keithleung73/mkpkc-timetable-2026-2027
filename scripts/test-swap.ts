@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { eligibleCoverTeachers, generateCoverPlan, isOccupied, teachingLessonsOnDay } from "../src/lib/cover";
+import { eligibleCoverTeachers, generateCoverPlan, isOccupied, mergeCoverSlotIntoPlan, teachingLessonsOnDay } from "../src/lib/cover";
 import { isFree } from "../src/lib/queries";
 import { isNonRegularLesson, isRemedialLesson, lessonOccupiesTeacher } from "../src/lib/lesson-kind";
 import { planTeacherLeaveSwaps } from "../src/lib/swap";
@@ -551,6 +551,28 @@ const 乙 = teacher("乙", "乙老師");
     partnerPeriodId: "p4",
   });
   assert.ok("error" in missing);
+}
+
+{
+  const 丙 = teacher("丙", "丙老師");
+  const data = schedule(
+    [振, 乙, 丙],
+    [
+      lesson("振-p6", "wed", "p6", "振", { classIds: ["1A"], roomId: "201" }),
+      lesson("丙-p6", "wed", "p6", "丙", { classIds: ["2D"], roomId: "305" }),
+    ],
+  );
+  const merged = mergeCoverSlotIntoPlan(data, null, "2026-09-02", "wed", "振", "p6", "乙", "sick");
+  assert.ok(!("error" in merged));
+  if ("error" in merged) throw new Error(String(merged.error));
+  const coverPlans = [{ ...merged, id: "cover-wed", confirmedAt: "2026-09-02T00:00:00.000Z" }];
+  const plan = planTeacherLeaveSwaps(data, "丙", ["2026-09-02"], "2026-09-02", { coverPlans });
+  const hit = plan.results.find((r) => r.unit.periodId === "p6");
+  assert.ok(hit, "丙星期三第六節應有調堂／代堂項目");
+  assert.ok(
+    !(hit?.coverSuggestions ?? []).some((c) => c.teacherId === "乙"),
+    "人手已安排乙代第六節後，電產生調堂不能再派乙代另一班第六節",
+  );
 }
 
 console.log("swap / CLP / confirmed timetable ok");
