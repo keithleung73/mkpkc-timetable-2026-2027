@@ -8,6 +8,9 @@ export { coverWeight, formatCoverPoints };
 
 export const MAX_OWN_LESSONS = 6;
 
+/** 同一代堂人一日內代堂總量不能超過呢個數（班主任節計 0.5） */
+export const MAX_COVER_LOAD_PER_DAY = 2;
+
 /** 盡量避免編代堂（軟限制：無人可代時仍可編；亦可人手改派） */
 export const COVER_AVOID_TEACHER_NAMES = [
   "張敬才",
@@ -267,6 +270,20 @@ export function isOccupied(data: ScheduleData, teacherId: string, day: DayId, pe
   );
 }
 
+export function assignedCoverLoad(assignments: CoverAssignment[], teacherId: string): number {
+  return assignments
+    .filter((a) => a.coverTeacherId === teacherId)
+    .reduce((sum, a) => sum + coverWeight(a.periodId), 0);
+}
+
+function wouldExceedDailyCoverLoad(
+  alreadyAssigned: CoverAssignment[],
+  teacherId: string,
+  periodId: string,
+) {
+  return assignedCoverLoad(alreadyAssigned, teacherId) + coverWeight(periodId) > MAX_COVER_LOAD_PER_DAY;
+}
+
 function consecutiveCoverViolation(
   day: DayId,
   coverPeriod: string,
@@ -314,6 +331,7 @@ export function eligibleCoverTeachers(
     const own = teachingLoadOnDay(data, teacher.id, day);
     if (own > MAX_OWN_LESSONS) continue;
     if (isOccupied(data, teacher.id, day, slot.periodId)) continue;
+    if (wouldExceedDailyCoverLoad(alreadyAssigned, teacher.id, slot.periodId)) continue;
     if (consecutiveCoverViolation(day, slot.periodId, alreadyAssigned, teacher.id)) continue;
     const avoidPreferred = isCoverAvoidTeacher(teacher);
     const consecutiveDayRisk = ctx

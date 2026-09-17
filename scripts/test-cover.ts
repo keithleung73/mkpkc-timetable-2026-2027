@@ -4,6 +4,7 @@ import {
   eligibleCoverTeachers,
   generateCoverPlan,
   mergeCoverSlotIntoPlan,
+  MAX_COVER_LOAD_PER_DAY,
   MAX_OWN_LESSONS,
   undoBalances,
   weekdayFromIsoDate,
@@ -126,6 +127,39 @@ const F = teacher("F", "己");
   assert.notDeepEqual(periods, ["p3", "p4"], "同一人不能連續代 p3 同 p4");
   assert.equal(plan.assignments.length, 2, "兩堂都應有人代");
   assert.equal(new Set(plan.assignments.map((x) => x.coverTeacherId)).size, 2);
+}
+
+{
+  const data = schedule(
+    [A, B],
+    [
+      lesson("abs-p1", "mon", "p1", "A"),
+      lesson("abs-p3", "mon", "p3", "A"),
+      lesson("abs-p5", "mon", "p5", "A"),
+    ],
+  );
+  const plan = generateCoverPlan(data, "mon", "2026-08-31", ["A"], { B: -9 });
+  const byB = plan.assignments.filter((x) => x.coverTeacherId === "B");
+  assert.equal(byB.length, MAX_COVER_LOAD_PER_DAY, "同一人一日最多代兩堂");
+  assert.equal(plan.assignments.length, 2);
+  assert.equal(plan.leftover.length, 1, "第三堂應留給其他人，無人則未編");
+}
+
+{
+  const data = schedule(
+    [A, B],
+    [
+      lesson("hr", "mon", "hr", "A", { subject: "班主任節" }),
+      lesson("abs-p3", "mon", "p3", "A"),
+      lesson("abs-p5", "mon", "p5", "A"),
+    ],
+  );
+  const plan = generateCoverPlan(data, "mon", "2026-08-31", ["A"], { B: -9 });
+  const load = plan.assignments
+    .filter((x) => x.coverTeacherId === "B")
+    .reduce((n, a) => n + (a.periodId === "hr" ? 0.5 : 1), 0);
+  assert.ok(load <= MAX_COVER_LOAD_PER_DAY, "連班主任節 0.5 都唔可以超過兩堂");
+  assert.equal(plan.leftover.length, 1);
 }
 
 {
