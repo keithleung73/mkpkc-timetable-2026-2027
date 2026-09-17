@@ -26,6 +26,7 @@ import {
   generateCoverPlan,
   hkTodayIso,
   MAX_CONSECUTIVE_COVER_DAYS,
+  MAX_COVER_LOAD_PER_DAY,
   MAX_OWN_LESSONS,
   previewDeltas,
   reassignCover,
@@ -311,6 +312,7 @@ function Inner() {
           <p>公假：仍會編代堂，但請假人同代堂人都不加減分數。</p>
           <p>病假／事假較多（結餘較負）者優先代堂，其後先睇當日原有堂數。</p>
           <p>當日原有課堂多於 {MAX_OWN_LESSONS} 節者不能代堂。</p>
+          <p>同一人一日內代堂不能多過 {MAX_COVER_LOAD_PER_DAY} 堂（班主任節計 0.5）。</p>
           <p>學校假期、統測、考試、深度學習周、陸運會、開放日、教師發展日等無堂日無需代堂。</p>
           <p>同一人唔可以連續兩節代堂（例如代完第三節就不能代第四節）；同自己原本課堂相鄰則可以。</p>
           <p>已確認調堂會改當日佔用：被調去上課嘅同事該節不能代堂。CLP 可以調堂（調去 CLP／空堂）；CLP 本身唔擋代堂。</p>
