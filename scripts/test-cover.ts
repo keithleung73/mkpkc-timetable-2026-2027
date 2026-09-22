@@ -1,20 +1,26 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   applyBalances,
   applyConfirmedCovers,
   eligibleCoverTeachers,
   generateCoverPlan,
+  isOccupied,
   manualCoverTeachers,
   mergeCoverSlotIntoPlan,
   MAX_COVER_LOAD_PER_DAY,
   MAX_OWN_LESSONS,
+  ownTeachingLoadOnDay,
   PTH_DRAMA_COMBINE_REASON,
+  slotsToCover,
   undoBalances,
   validateCoverPlan,
   weekdayFromIsoDate,
   wouldExceedConsecutiveCoverDays,
   buildCoverDatesByTeacher,
 } from "../src/lib/cover";
+import { ensureHomeroomLessons } from "../src/lib/homeroom";
+import { isAdminDutySubject, isNonRegularLesson } from "../src/lib/lesson-kind";
 import { coverPdfFilename, coverPdfRows, formatCoverFormDate } from "../src/lib/cover-pdf";
 import { renderCoverPdf } from "../src/lib/cover-pdf-server";
 import type { Lesson, ScheduleData, Teacher } from "../src/lib/types";
@@ -525,6 +531,110 @@ const F = teacher("F", "己");
     wouldExceedConsecutiveCoverDays("泰", "2026-09-02", dates),
     false,
     "合班唔計連續代堂日",
+  );
+}
+
+{
+  assert.equal(isAdminDutySubject("聯咨會"), true);
+  assert.equal(isAdminDutySubject("首席會"), true);
+  assert.equal(isAdminDutySubject("學校部會"), true);
+  assert.equal(isAdminDutySubject("學務部會議"), true);
+  assert.equal(isAdminDutySubject("學生部會議"), true);
+  assert.equal(isAdminDutySubject("資創會"), true);
+  assert.equal(isAdminDutySubject("資訊及創新部會"), true);
+  assert.equal(isAdminDutySubject("CLP 中二數學"), true);
+  assert.equal(isAdminDutySubject("數學"), false);
+
+  const 龍 = teacher("龍", "梁國龍");
+  const 毅 = teacher("毅", "黃子毅");
+  const data = schedule(
+    [A, 龍, 毅],
+    [
+      lesson("ial-p3", "tue", "p3", "龍", { classIds: ["6E-IAL"], subject: "6IAL 會計" }),
+      lesson("ial-p4", "tue", "p4", "龍", { classIds: ["6E-IAL"], subject: "6IAL 會計" }),
+      lesson("council", "tue", "p7", "龍", { subject: "聯咨會", classIds: [], roomId: "" }),
+      lesson("hr", "thu", "hr", "毅", { subject: "班主任節", classIds: ["5B"] }),
+      lesson("m1", "thu", "p1", "毅", { classIds: ["3E"], subject: "數學" }),
+      lesson("m2", "thu", "p2", "毅", { classIds: ["5B"], subject: "數必" }),
+      lesson("m3", "thu", "p3", "毅", { classIds: ["6A"], subject: "數必" }),
+      lesson("m4", "thu", "p4", "毅", { classIds: ["6A"], subject: "數必" }),
+      lesson("m8", "thu", "p8", "毅", { classIds: ["5B"], subject: "數必" }),
+      lesson("abs-p6", "thu", "p6", "A"),
+    ],
+  );
+  assert.equal(isNonRegularLesson(data.lessons.find((l) => l.id === "council")!), true);
+  assert.equal(ownTeachingLoadOnDay(data, "龍", "tue"), 2, "聯咨會不計入當日堂數");
+  assert.equal(isOccupied(data, "龍", "tue", "p7"), false, "聯咨會唔擋代堂");
+  const 龍slots = slotsToCover(data, "tue", ["龍"]);
+  assert.equal(龍slots.length, 2);
+  assert.ok(!龍slots.some((s) => s.subject.includes("聯咨")));
+
+  assert.equal(ownTeachingLoadOnDay(data, "毅", "thu"), 5, "班主任節不計入當日堂數");
+  const list = eligibleCoverTeachers(
+    data,
+    "thu",
+    new Set(["A"]),
+    { 毅: 0 },
+    {
+      periodId: "p6",
+      classIds: ["1A"],
+      subject: "數學",
+      roomId: "201",
+      teacherId: "A",
+      teacherName: "甲",
+    },
+    [],
+  );
+  assert.ok(list.some((x) => x.teacher.id === "毅"), "5 堂加班主任節仍可代人");
+
+  const hrPlan = generateCoverPlan(data, "thu", "2026-09-03", ["毅"], { A: -4 });
+  const hrAssign = hrPlan.assignments.find((a) => a.periodId === "hr");
+  assert.ok(hrAssign, "班主任節仍要代");
+  const hrPts = hrPlan.assignments
+    .filter((a) => a.coverTeacherId === (hrAssign?.coverTeacherId ?? ""))
+    .reduce((n, a) => n + (a.periodId === "hr" ? 0.5 : 1), 0);
+  assert.ok(hrPts >= 0.5);
+}
+
+{
+  const live = ensureHomeroomLessons(
+    JSON.parse(readFileSync("data/schedule.json", "utf8")) as ScheduleData,
+  );
+  assert.equal(ownTeachingLoadOnDay(live, "龍", "tue"), 2, "正式課表：梁國龍星期二只計兩堂");
+  const 龍cover = slotsToCover(live, "tue", ["龍"]);
+  assert.ok(!龍cover.some((s) => /聯咨|首席|部會|CLP/i.test(s.subject)));
+  assert.equal(ownTeachingLoadOnDay(live, "毅", "thu"), 5, "正式課表：黃子毅星期四 5 堂正規課");
+  assert.ok(
+    !live.lessons.some(
+      (l) => l.teacherIds.includes("萍") && l.day === "tue" && l.periodId === "p3" && l.subject.includes("數必"),
+    ),
+    "已刪吳燕萍星期二第三節 5C 數必",
+  );
+  assert.ok(
+    !live.lessons.some(
+      (l) => l.teacherIds.includes("娟") && l.day === "tue" && l.periodId === "p3" && l.subject.includes("電腦"),
+    ),
+    "已刪李麗娟星期二第三節 2B 電腦",
+  );
+  assert.ok(
+    !live.lessons.some(
+      (l) =>
+        l.teacherIds.includes("麗") &&
+        l.day === "thu" &&
+        l.periodId === "p1" &&
+        l.classIds.includes("1D"),
+    ),
+    "已刪陳麗嫻星期四第一節 1D 中國語文",
+  );
+  assert.ok(
+    !live.lessons.some(
+      (l) =>
+        l.teacherIds.includes("鵠") &&
+        l.day === "thu" &&
+        ["p2", "p3", "p5"].includes(l.periodId) &&
+        l.kind !== "meeting",
+    ),
+    "已刪鄧鵠耀星期四第二、三、五節",
   );
 }
 

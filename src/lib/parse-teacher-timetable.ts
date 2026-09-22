@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { isCoreSubject } from "./constants";
+import { isAdminDutySubject } from "./lesson-kind";
 import type { DayId, Lesson, Room, ScheduleData, SchoolClass, Teacher } from "./types";
 
 const SKIP =
@@ -127,7 +128,7 @@ function parseCell(raw: string): Omit<Lesson, "id" | "day" | "periodId" | "teach
   const flat = text.replace(/\s+/g, "");
   if (!flat || SKIP.test(flat) || SKIP.test(text.split("\n")[0].replace(/\s+/g, ""))) return null;
 
-  const isMeeting = /^(CLP|學務|生涯會|學生部|首席會|部會)/.test(flat) || /會議/.test(flat);
+  const isMeeting = isAdminDutySubject(flat) || isAdminDutySubject(text);
   const lines = text
     .split(/\n+/)
     .map((s) => s.trim())

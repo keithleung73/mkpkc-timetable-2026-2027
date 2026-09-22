@@ -1,6 +1,7 @@
 import type { DayId, Lesson, ScheduleData, Teacher } from "./types";
 import { ALL_TEACHING_PERIODS, DAYS, LESSON_PERIODS } from "./constants";
-import { lessonOccupiesTeacher } from "./lesson-kind";
+import { isHomeroomLesson } from "./homeroom";
+import { isTeachingLesson, lessonOccupiesTeacher } from "./lesson-kind";
 
 import { filterTeachers } from "./search";
 
@@ -58,12 +59,18 @@ export function lessonAt(
   });
 }
 
+function countsTowardDailyLoad(lesson: Lesson): boolean {
+  return isTeachingLesson(lesson) && !isHomeroomLesson(lesson);
+}
+
 export function teacherLessonCountOnDay(data: ScheduleData, teacherId: string, day: DayId): number {
-  return data.lessons.filter((l) => l.day === day && l.teacherIds.includes(teacherId)).length;
+  return data.lessons.filter(
+    (l) => l.day === day && l.teacherIds.includes(teacherId) && countsTowardDailyLoad(l),
+  ).length;
 }
 
 export function weeklyLoad(data: ScheduleData, teacherId: string): number {
-  return lessonsOfTeacher(data, teacherId).length;
+  return lessonsOfTeacher(data, teacherId).filter(countsTowardDailyLoad).length;
 }
 
 export function isFree(data: ScheduleData, teacherId: string, day: DayId, periodId: string): boolean {
