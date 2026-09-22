@@ -68,6 +68,32 @@ const plan: SavedCoverPlan = {
   ],
 };
 
+const combinePlan: SavedCoverPlan = {
+  id: "cover-combine",
+  confirmedAt: "2026-09-05T00:00:00.000Z",
+  day: "tue",
+  date: "2026-09-08",
+  absentees: ["彤"],
+  leaveKinds: { 彤: "sick" },
+  slots: [],
+  assignments: [
+    {
+      periodId: "p7",
+      classIds: ["1A"],
+      subject: "普話",
+      roomId: "201",
+      absenteeId: "彤",
+      absenteeName: "林紀彤",
+      coverTeacherId: "泰",
+      coverTeacherName: "林至泰",
+      coverBalanceBefore: 0,
+      reason: "普通話／戲劇合班，不計節數",
+      combine: true,
+    },
+  ],
+  leftover: [],
+};
+
 {
   assert.equal(monthStartIso("2026-09-17"), "2026-09-01");
   assert.equal(monthEndIso("2026-09-17"), "2026-09-30");
@@ -126,6 +152,17 @@ const plan: SavedCoverPlan = {
   assert.equal(sheet[0]?.[0], "老師");
   assert.ok(sheet[0]?.includes("代堂節數"));
   assert.ok(sheet.some((line) => line.includes("陳振華") && line.includes("調堂")));
+
+  const 泰 = collectTeacherRecords([], [combinePlan], "泰", rangeFromPreset("day", "2026-09-08"));
+  assert.equal(泰[0]?.role, "combine");
+  assert.equal(泰[0]?.roleLabel, "合班（不計節數）");
+  const 泰Sum = summarizeTeacherRecords(泰);
+  assert.equal(泰Sum.coveringPeriods, 0);
+  assert.equal(泰Sum.combine, 1);
+  const 彤 = collectTeacherRecords([], [combinePlan], "彤", rangeFromPreset("day", "2026-09-08"));
+  assert.equal(summarizeTeacherRecords(彤).absenteePeriods, 0);
+  const combineSheet = teacherRecordSheetRows(泰);
+  assert.ok(combineSheet.some((line) => line.includes("合班（不計節數）") && line.includes("0")));
 }
 
 console.log("teacher records query ok");

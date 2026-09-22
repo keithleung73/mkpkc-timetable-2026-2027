@@ -8,6 +8,7 @@ import {
   mergeCoverSlotIntoPlan,
   MAX_COVER_LOAD_PER_DAY,
   MAX_OWN_LESSONS,
+  PTH_DRAMA_COMBINE_REASON,
   undoBalances,
   validateCoverPlan,
   weekdayFromIsoDate,
@@ -460,6 +461,71 @@ const F = teacher("F", "己");
   const counted = applyBalances({}, withB);
   assert.equal(counted.B, 1, "人手代堂要計節數");
   assert.equal(counted.C, -1);
+}
+
+{
+  const 彤 = teacher("彤", "林紀彤");
+  const 泰 = teacher("泰", "林至泰");
+  const data = schedule(
+    [彤, 泰, A, B, C],
+    [
+      lesson("pth", "tue", "p7", "彤", { classIds: ["1A"], subject: "普話" }),
+      lesson("drama", "tue", "p7", "泰", { classIds: ["1A"], subject: "戲劇", roomId: "513" }),
+      lesson("a-p1", "tue", "p1", "A"),
+      lesson("a-p3", "tue", "p3", "A"),
+    ],
+  );
+  const plan = generateCoverPlan(data, "tue", "2026-09-08", ["彤"], { 泰: -9, B: 0 });
+  const p7 = plan.assignments.find((a) => a.periodId === "p7");
+  assert.equal(p7?.coverTeacherId, "泰");
+  assert.equal(p7?.combine, true);
+  assert.equal(p7?.reason, PTH_DRAMA_COMBINE_REASON);
+  assert.equal(plan.leftover.length, 0);
+  const next = applyBalances({}, plan);
+  assert.equal(next.彤 ?? 0, 0, "合班不計請假人 ±");
+  assert.equal(next.泰 ?? 0, 0, "合班不計代堂人 ±");
+  const undone = undoBalances(next, plan);
+  assert.equal(undone.彤 ?? 0, 0);
+  assert.equal(undone.泰 ?? 0, 0);
+  assert.equal(validateCoverPlan(data, plan, {}), null, "合班搭檔該節有課仍可入帳");
+
+  const both = generateCoverPlan(data, "tue", "2026-09-08", ["彤", "泰"], { B: -8, C: 0 });
+  assert.ok(
+    !both.assignments.some((a) => a.combine),
+    "雙方請假就不能合班",
+  );
+  assert.ok(both.assignments.length + both.leftover.length >= 2);
+
+  const withLoad = generateCoverPlan(data, "tue", "2026-09-08", ["彤", "A"], { 泰: -9, B: 0, C: 0 });
+  const by泰 = withLoad.assignments.filter((a) => a.coverTeacherId === "泰");
+  assert.ok(by泰.some((a) => a.combine && a.periodId === "p7"), "合班仍要列入安排");
+  assert.equal(
+    by泰.filter((a) => !a.combine).length,
+    MAX_COVER_LOAD_PER_DAY,
+    "合班不佔一日兩堂代堂上限",
+  );
+
+  const merged = mergeCoverSlotIntoPlan(data, null, "2026-09-08", "tue", "彤", "p7", "泰", "sick");
+  assert.ok(!("error" in merged));
+  if ("error" in merged) throw new Error(String(merged.error));
+  assert.equal(merged.assignments[0]?.combine, true);
+  assert.equal(merged.assignments[0]?.reason, PTH_DRAMA_COMBINE_REASON);
+  const mergedNext = applyBalances({}, merged);
+  assert.equal(mergedNext.彤 ?? 0, 0);
+  assert.equal(mergedNext.泰 ?? 0, 0);
+
+  const pdfRows = coverPdfRows(plan, data);
+  assert.ok(pdfRows.some((r) => r.action === "合班" && r.arrangement === "合班（不計節數）"));
+
+  const dates = buildCoverDatesByTeacher([
+    { date: "2026-08-31", assignments: [{ coverTeacherId: "泰", combine: true }] },
+    { date: "2026-09-01", assignments: [{ coverTeacherId: "泰", combine: true }] },
+  ]);
+  assert.equal(
+    wouldExceedConsecutiveCoverDays("泰", "2026-09-02", dates),
+    false,
+    "合班唔計連續代堂日",
+  );
 }
 
 void (async () => {

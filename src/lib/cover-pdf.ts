@@ -95,6 +95,7 @@ type RawLine = {
   coverTeacherId: string;
   coverTeacherName: string;
   leftover: boolean;
+  combine: boolean;
 };
 
 function rawLines(plan: CoverPlan): RawLine[] {
@@ -122,6 +123,7 @@ function rawLines(plan: CoverPlan): RawLine[] {
       coverTeacherId: cover?.coverTeacherId ?? "",
       coverTeacherName: cover?.coverTeacherName ?? "",
       leftover: !cover,
+      combine: Boolean(cover?.combine),
     });
   };
 
@@ -142,6 +144,7 @@ function sameGroup(a: RawLine, b: RawLine) {
     a.absenteeId === b.absenteeId &&
     a.coverTeacherId === b.coverTeacherId &&
     a.leftover === b.leftover &&
+    a.combine === b.combine &&
     a.subject === b.subject &&
     a.roomId === b.roomId &&
     [...a.classIds].sort().join(",") === [...b.classIds].sort().join(",")
@@ -179,12 +182,12 @@ export function coverPdfRows(plan: CoverPlan, data: ScheduleData): CoverPdfRow[]
       showDate: index === 0,
       teacher: first.absenteeName,
       showTeacher,
-      action: "代堂",
+      action: first.combine ? "合班" : "代堂",
       periods,
       classSubjectRoom: `${classLabel(data, first.classIds)} ${subjectShort(first.subject)} ${room}`,
       coverTeacher: first.leftover ? "" : first.coverTeacherName,
-      arrangement: first.leftover ? "" : "即日代堂",
-      remark: first.leftover ? "未能編配" : "",
+      arrangement: first.leftover ? "" : first.combine ? "合班（不計節數）" : "即日代堂",
+      remark: first.leftover ? "未能編配" : first.combine ? "不計節數" : "",
     };
   });
 }

@@ -329,6 +329,7 @@ function Inner() {
           <p>同一人一日內代堂不能多過 {MAX_COVER_LOAD_PER_DAY} 堂（班主任節計 0.5）。</p>
           <p>學校假期、統測、考試、深度學習周、陸運會、開放日、教師發展日等無堂日無需代堂。</p>
           <p>同一人唔可以連續兩節代堂（例如代完第三節就不能代第四節）；同自己原本課堂相鄰則可以。</p>
+          <p>普通話／戲劇：若另一位老師在，由該老師合班，列入安排但不計代堂節數及 ±。雙方都請假則照常找人代。</p>
           <p>已確認調堂會改當日佔用：被調去上課嘅同事該節不能代堂。已入帳／人手指定嘅代堂同樣佔用該節，之後電產生調堂或代堂唔會再派同一人同一節。CLP 可以調堂（調去 CLP／空堂）；CLP 本身唔擋代堂。</p>
           <p>
             盡量唔編：{COVER_AVOID_TEACHER_NAMES.join("、")}
@@ -826,7 +827,11 @@ function PlanTable({
                     {periodLabel(a.periodId)}
                     <div className="text-xs text-muted-foreground">
                       {formatTimeRange(plan.day, a.periodId)}
-                      {coverWeight(a.periodId) !== 1 ? ` · ${coverWeight(a.periodId)} 節` : ""}
+                      {a.combine
+                        ? " · 合班不計節數"
+                        : coverWeight(a.periodId) !== 1
+                          ? ` · ${coverWeight(a.periodId)} 節`
+                          : ""}
                     </div>
                   </td>
                   <td className="px-3 py-2">
@@ -957,7 +962,7 @@ function PlanTable({
 }
 
 function coverOptionLabel(o: EligibleCover) {
-  return `${o.teacher.name}（${o.teacher.code}）${o.balance}`;
+  return `${o.teacher.name}（${o.teacher.code}）${o.combine ? "合班不計" : o.balance}`;
 }
 
 function CoverTeacherSelect({

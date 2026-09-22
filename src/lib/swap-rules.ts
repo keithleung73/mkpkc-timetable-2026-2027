@@ -39,6 +39,36 @@ export function splitRotatePartnerSubject(subject: string): "普通話" | "戲�
   return null;
 }
 
+export function isPthDramaSubject(subject: string): boolean {
+  return isPutonghuaSubject(subject) || isDramaSubject(subject);
+}
+
+export function classesOverlap(a: string[], b: string[]): boolean {
+  return a.some((x) =>
+    b.some((y) => x === y || classTokenMatches(x, y) || classTokenMatches(y, x)),
+  );
+}
+
+/** 同一班同一節並行嘅普通話／戲劇堂（對拆另一科） */
+export function findPthDramaPartnerLesson(
+  data: ScheduleData,
+  lesson: Pick<Lesson, "id" | "day" | "periodId" | "classIds" | "subject">,
+): Lesson | null {
+  const want = splitRotatePartnerSubject(lesson.subject);
+  if (!want) return null;
+  return (
+    data.lessons.find(
+      (l) =>
+        isTeachingLesson(l) &&
+        l.day === lesson.day &&
+        l.periodId === lesson.periodId &&
+        l.id !== lesson.id &&
+        classesOverlap(l.classIds, lesson.classIds) &&
+        subjectKey(l.subject) === want,
+    ) ?? null
+  );
+}
+
 export function roomFreeIgnoring(
   data: ScheduleData,
   roomId: string,
