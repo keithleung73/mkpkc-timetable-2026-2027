@@ -356,10 +356,18 @@ const 乙 = teacher("乙", "乙老師");
   );
   const plan = planTeacherLeaveSwaps(data, "彤", ["2026-09-08"], "2026-09-08");
   const hit = plan.results.find((r) => r.unit.periodId === "p7");
-  const rotate = hit?.swaps?.find((s) => s.mode === "split_rotate");
-  assert.ok(rotate, "普通話／戲劇應有對拆輪換建議");
-  assert.equal(rotate?.partnerDate, "2026-09-15");
-  assert.ok(rotate?.partnerTeacherIds.includes("泰"));
+  assert.equal(hit?.status, "cover", "普通話／戲劇應改為合班，不再對拆輪換");
+  assert.ok(
+    hit?.coverSuggestions.some((c) => c.teacherId === "泰" && c.combine),
+    "戲劇老師應列作合班建議",
+  );
+  assert.ok(!hit?.swaps?.some((s) => s.mode === "split_rotate"));
+
+  const cover = generateCoverPlan(data, "tue", "2026-09-08", ["彤"], {});
+  assert.equal(cover.assignments.length, 1);
+  assert.equal(cover.assignments[0]?.coverTeacherId, "泰");
+  assert.equal(cover.assignments[0]?.combine, true);
+  assert.equal(cover.leftover.length, 0);
 
   const recorded = confirmedSwapFromSuggestion(
     data,
@@ -378,10 +386,10 @@ const 乙 = teacher("乙", "乙老師");
   assert.ok(!("error" in recorded), String((recorded as { error?: string }).error ?? ""));
   if ("error" in recorded) throw new Error(String(recorded.error));
   const onLeave = applyConfirmedSwaps(data, "2026-09-08", [recorded]);
-  assert.ok(!onLeave.lessons.some((l) => l.id === "pth"), "請假日只由戲劇老師上全班");
+  assert.ok(!onLeave.lessons.some((l) => l.id === "pth"), "舊對拆紀錄請假日仍只由戲劇老師上全班");
   assert.ok(onLeave.lessons.some((l) => l.id === "drama"));
   const onRepay = applyConfirmedSwaps(data, "2026-09-15", [recorded]);
-  assert.ok(!onRepay.lessons.some((l) => l.id === "drama"), "下星期由請假老師上番全班");
+  assert.ok(!onRepay.lessons.some((l) => l.id === "drama"), "舊對拆紀錄下星期仍由請假老師上番全班");
   assert.ok(onRepay.lessons.some((l) => l.id === "pth"));
 }
 
@@ -405,9 +413,10 @@ const 乙 = teacher("乙", "乙老師");
   const live = JSON.parse(readFileSync("data/schedule.json", "utf8")) as ScheduleData;
   const plan = planTeacherLeaveSwaps(live, "彤", ["2026-09-08"], "2026-09-08");
   const p7 = plan.results.find((r) => r.unit.periodId === "p7" && r.unit.kind === "normal");
+  assert.equal(p7?.status, "cover");
   assert.ok(
-    p7?.swaps?.some((s) => s.mode === "split_rotate" && s.partnerTeacherIds.includes("泰")),
-    "正式課表 1A 普通話／戲劇可對拆輪換",
+    p7?.coverSuggestions.some((c) => c.combine && (c.teacherId === "泰" || c.teacherCode === "泰")),
+    "正式課表 1A 普通話／戲劇由另一位老師合班",
   );
 }
 
@@ -480,9 +489,15 @@ const 乙 = teacher("乙", "乙老師");
   assert.ok(pair, "2D 數學第七、八節應成同一科兩堂");
 
   const tong = planTeacherLeaveSwaps(live, "彤", ["2026-09-08"], "2026-09-08");
+  const pthUnits = tong.results.filter((r) => r.unit.subjects.some((s) => /普話|普通話/.test(s)));
+  assert.ok(pthUnits.length > 0, "正式課表林紀彤星期二應有普通話");
   assert.ok(
-    tong.results.some((r) => (r.swaps ?? []).some((s) => s.mode === "clp")),
-    "正式課表 CLP 可以調堂（1A 普通話調去星期三 CLP）",
+    pthUnits.every(
+      (r) =>
+        r.status === "cover" &&
+        (r.coverSuggestions ?? []).some((c) => c.combine && (c.teacherId === "泰" || c.teacherCode === "泰")),
+    ),
+    "正式課表普通話由戲劇老師合班，不再調去 CLP 或對拆輪換",
   );
 }
 

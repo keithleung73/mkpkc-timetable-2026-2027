@@ -254,6 +254,7 @@ function TeacherRecordsInner() {
         <Badge variant="outline">代堂 {summary.cover}</Badge>
         <Badge variant="outline">請假被代 {summary.absentee}（{formatCoverPoints(summary.absenteePeriods).replace(/^\+/, "")} 節）</Badge>
         <Badge variant="outline">代人上堂 {summary.covering}（{formatCoverPoints(summary.coveringPeriods).replace(/^\+/, "")} 節）</Badge>
+        {summary.combine > 0 ? <Badge variant="outline">合班（不計節數） {summary.combine}</Badge> : null}
         {summary.uncovered > 0 ? <Badge variant="outline">未編配 {summary.uncovered}</Badge> : null}
       </div>
 

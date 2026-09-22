@@ -15,7 +15,7 @@ export type DateRange = {
 
 export type TeacherRecordKind = "swap" | "cover";
 
-export type TeacherRecordRole = "leave" | "partner" | "absentee" | "cover" | "uncovered";
+export type TeacherRecordRole = "leave" | "partner" | "absentee" | "cover" | "uncovered" | "combine";
 
 export type TeacherRecordRow = {
   id: string;
@@ -221,7 +221,7 @@ function pushCoverRows(
         teacherId: a.absenteeId,
         teacherName: a.absenteeName,
         role: "absentee",
-        roleLabel: "請假由人代",
+        roleLabel: a.combine ? "請假由人合班" : "請假由人代",
         leaveKind: kind,
         subjects: [a.subject],
         classIds: a.classIds,
@@ -238,8 +238,8 @@ function pushCoverRows(
         periodText: periodLabel(a.periodId),
         teacherId: a.coverTeacherId,
         teacherName: a.coverTeacherName,
-        role: "cover",
-        roleLabel: "代人上堂",
+        role: a.combine ? "combine" : "cover",
+        roleLabel: a.combine ? "合班（不計節數）" : "代人上堂",
         leaveKind: kind,
         subjects: [a.subject],
         classIds: a.classIds,
@@ -305,9 +305,12 @@ export function summarizeTeacherRecords(rows: TeacherRecordRow[]) {
     partner: rows.filter((r) => r.role === "partner").length,
     absentee: absentee.length,
     covering: covering.length,
+    combine: rows.filter((r) => r.role === "combine").length,
     uncovered: rows.filter((r) => r.role === "uncovered").length,
     coveringPeriods: covering.reduce((sum, r) => sum + coverWeight(r.periodId), 0),
-    absenteePeriods: absentee.reduce((sum, r) => sum + coverWeight(r.periodId), 0),
+    absenteePeriods: absentee
+      .filter((r) => r.roleLabel !== "請假由人合班")
+      .reduce((sum, r) => sum + coverWeight(r.periodId), 0),
   };
 }
 
@@ -336,7 +339,9 @@ export function teacherRecordSheetRows(rows: TeacherRecordRow[]): string[][] {
       r.roleLabel,
       r.leaveKind ? leaveKindLabel(r.leaveKind) : "",
       r.periodText,
-      r.kind === "cover" ? String(coverWeight(r.periodId)) : "",
+      r.kind === "cover"
+        ? String(r.role === "combine" || r.roleLabel === "請假由人合班" ? 0 : coverWeight(r.periodId))
+        : "",
       r.subjects.join("、"),
       r.classIds.join("、"),
       r.counterpartName,

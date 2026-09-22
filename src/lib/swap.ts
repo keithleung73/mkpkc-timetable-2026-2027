@@ -9,23 +9,22 @@ import {
   buildCoverDatesByTeacher,
   coverPlanOnDate,
   eligibleCoverTeachers,
+  pthDramaCombinePartnerIds,
   weekdayFromIsoDate,
   type CoverAssignment,
   type CoverBalances,
   type CoverPlan,
   type CoverSlot,
-  addDaysIso,
 } from "./cover";
 import { isHomeroomLesson } from "./homeroom";
 import { isClpSubject, isRemedialLesson, isTeachingLesson, lessonOccupiesTeacher } from "./lesson-kind";
 import { classTokenMatches } from "./queries";
 import { schoolClosedReason, swapBlockedReason } from "./school-calendar";
-import { applyConfirmedSwaps, resolveDateForWeekday, swapSearchDates, type ConfirmedSwap } from "./swap-records";
+import { applyConfirmedSwaps, swapSearchDates, type ConfirmedSwap } from "./swap-records";
 import {
   adjacentPeriodPairs,
   isPthDramaPair,
   roomsFreeForMove,
-  splitRotatePartnerSubject,
   subjectKey,
   swapExceedsClassSubjectDayCap,
   teacherHasOnlyClpOrFree,
@@ -76,6 +75,8 @@ export type CoverSuggestion = {
   sameSubject: boolean;
   teachesClass: boolean;
   lessonsToday: number;
+  /** 普通話／戲劇合班：該節有課仍可合班，不計節數 */
+  combine?: boolean;
 };
 
 export type LeavePlanContext = {
@@ -484,38 +485,33 @@ function findNormalSwaps(
   return matches;
 }
 
-function findSplitRotateSwap(
+function unitHasPthDramaCombine(
   data: ScheduleData,
   unit: SwapUnit,
   leaveTeacherId: string,
-): SwapMatch | null {
-  const lesson = unit.lessons.find((l) => l.teacherIds.includes(leaveTeacherId));
-  if (!lesson) return null;
-  const want = splitRotatePartnerSubject(lesson.subject);
-  if (!want) return null;
-  const partner = data.lessons.find(
-    (l) =>
-      isTeaching(l) &&
-      l.day === unit.day &&
-      l.periodId === unit.periodId &&
-      l.id !== lesson.id &&
-      classesOverlap(l.classIds, lesson.classIds) &&
-      subjectKey(l.subject) === want,
-  );
-  if (!partner) return null;
-  const nextDate = resolveDateForWeekday(addDaysIso(unit.leaveDate, 1), unit.day, [unit.leaveDate]);
-  if (!nextDate) return null;
-  return {
-    partnerLessons: [partner],
-    partnerDay: unit.day,
-    partnerDate: nextDate,
-    partnerPeriodId: unit.periodId,
-    partnerSubjects: [partner.subject],
-    partnerTeacherIds: [...partner.teacherIds],
-    partnerTeacherNames: lessonTeacherNames(data, [partner]),
-    mode: "split_rotate",
-    reason: `普通話／戲劇對拆：今個星期由${lessonTeacherNames(data, [partner]).join("、")}上全班；下星期（${nextDate}）由請假老師上番全班`,
-  };
+  extraAbsentees: Set<string>,
+): boolean {
+  const absentees = new Set(extraAbsentees);
+  absentees.add(leaveTeacherId);
+  for (const lesson of unit.lessons) {
+    if (!lesson.teacherIds.includes(leaveTeacherId)) continue;
+    if (
+      pthDramaCombinePartnerIds(
+        data,
+        unit.day,
+        {
+          periodId: unit.periodId,
+          classIds: lesson.classIds,
+          subject: lesson.subject,
+          teacherId: leaveTeacherId,
+        },
+        absentees,
+      ).length > 0
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function findSubjectPairSwaps(
@@ -749,8 +745,8 @@ function coverForUnit(
       const prev = out.get(c.teacher.id);
       if (
         !prev ||
-        Number(sameSubject) + Number(teachesClass) >
-          Number(prev.sameSubject) + Number(prev.teachesClass)
+        Number(Boolean(c.combine)) + Number(sameSubject) + Number(teachesClass) >
+          Number(Boolean(prev.combine)) + Number(prev.sameSubject) + Number(prev.teachesClass)
       ) {
         out.set(c.teacher.id, {
           teacherId: c.teacher.id,
@@ -759,12 +755,14 @@ function coverForUnit(
           sameSubject,
           teachesClass,
           lessonsToday: c.ownLessons,
+          combine: c.combine,
         });
       }
     }
   }
   return [...out.values()].sort(
     (a, b) =>
+      Number(Boolean(b.combine)) - Number(Boolean(a.combine)) ||
       Number(b.sameSubject) - Number(a.sameSubject) ||
       Number(b.teachesClass) - Number(a.teachesClass) ||
       a.lessonsToday - b.lessonsToday ||
@@ -877,6 +875,19 @@ export function planTeacherLeaveSwaps(
       };
     }
 
+    if (unit.kind === "normal") {
+      const extraAbs = absenteesOnDate(unit.leaveDate, coverPlans, confirmedSwaps);
+      extraAbs.add(teacherId);
+      if (unitHasPthDramaCombine(data, unit, teacherId, extraAbs)) {
+        return {
+          unit,
+          status: "cover" as const,
+          coverSuggestions: coversFor(unit),
+          blockers: [],
+        };
+      }
+    }
+
     if (unit.kind === "subject_pair") {
       const pairSwaps = filterSwaps(unit, findSubjectPairSwaps(data, unit, teacherId, searchDates));
       if (pairSwaps.length > 0) {
@@ -901,8 +912,7 @@ export function planTeacherLeaveSwaps(
       unit.kind === "ial_bundle"
         ? findIalBundleSwaps(data, unit, teacherId, searchDates)
         : findNormalSwaps(data, unit, teacherId, searchDates);
-    const rotate = unit.kind === "normal" ? findSplitRotateSwap(data, unit, teacherId) : null;
-    const swaps = filterSwaps(unit, rotate ? [rotate, ...found] : found);
+    const swaps = filterSwaps(unit, found);
 
     if (swaps.length > 0) {
       return {
