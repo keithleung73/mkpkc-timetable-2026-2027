@@ -37,7 +37,6 @@ import {
   slotKey,
   formatCoverPoints,
   coverWeight,
-  teachingLoadOnDay,
   weekdayFromIsoDate,
   type CoverBalances,
   type CoverPickContext,
@@ -322,15 +321,15 @@ function Inner() {
         </CardHeader>
         <CardContent className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
           <p>病假／事假：請假同事每堂 −1；成功代堂同事每堂 +1。未能編配嘅堂，請假人仍然扣分。</p>
-          <p>08:00 班主任節（一至四 08:00–08:25，五 08:00–08:15）都要找人代；只當 0.5 節計。若該班仍有另一位班主任在，則不用另找人。</p>
+          <p>08:00 班主任節（一至四 08:00–08:25，五 08:00–08:15）都要找人代；只當 0.5 節代堂。若該班仍有另一位班主任在，則不用另找人。班主任節不計入老師當日正規堂數。</p>
           <p>公假：仍會編代堂，但請假人同代堂人都不加減分數。</p>
           <p>病假／事假較多（結餘較負）者優先代堂，其後先睇當日原有堂數。</p>
-          <p>當日正規課堂多於 {MAX_OWN_LESSONS} 節者不能自動代堂（08:00 班主任節唔計入呢個上限）。人手仍可指定該節得閒同事。</p>
+          <p>當日正規課堂多於 {MAX_OWN_LESSONS} 節者不能自動代堂。08:00 班主任節要代（計 0.5 代堂），但不計入老師當日正規堂數。CLP、聯咨會、首席會、學務／學生／學校／資訊及創新等部會不是課堂：不用代、唔擋代堂，亦不計入當日堂數。</p>
           <p>同一人一日內代堂不能多過 {MAX_COVER_LOAD_PER_DAY} 堂（班主任節計 0.5）。</p>
           <p>學校假期、統測、考試、深度學習周、陸運會、開放日、教師發展日等無堂日無需代堂。</p>
           <p>同一人唔可以連續兩節代堂（例如代完第三節就不能代第四節）；同自己原本課堂相鄰則可以。</p>
           <p>普通話／戲劇：若另一位老師在，由該老師合班，列入安排但不計代堂節數及 ±。雙方都請假則照常找人代。</p>
-          <p>已確認調堂會改當日佔用：被調去上課嘅同事該節不能代堂。已入帳／人手指定嘅代堂同樣佔用該節，之後電產生調堂或代堂唔會再派同一人同一節。CLP 可以調堂（調去 CLP／空堂）；CLP 本身唔擋代堂。</p>
+          <p>已確認調堂會改當日佔用：被調去上課嘅同事該節不能代堂。已入帳／人手指定嘅代堂同樣佔用該節，之後電產生調堂或代堂唔會再派同一人同一節。CLP 可以調堂（調去 CLP／空堂）；CLP、聯咨會、首席會同部會本身唔擋代堂。</p>
           <p>
             盡量唔編：{COVER_AVOID_TEACHER_NAMES.join("、")}
             （無人可代時仍可編；亦可人手改派）。
@@ -508,7 +507,6 @@ function Inner() {
               ) : (
                 listed.map((t) => {
                   const checked = absentees.includes(t.id);
-                  const own = teachingLoadOnDay(effectiveData, t.id, day);
                   const regular = ownTeachingLoadOnDay(effectiveData, t.id, day);
                   const bal = balances[t.id] ?? 0;
                   return (
@@ -534,7 +532,7 @@ function Inner() {
                           <BalanceChip value={bal} />
                         </span>
                         <span className="block text-xs text-muted-foreground">
-                          當日 {own} 堂
+                          當日 {regular} 堂
                           {regular > MAX_OWN_LESSONS ? " · 超過 6 堂正規課，不能自動代人" : ""}
                           {teacherEnglishLabels(t)[0] ? ` · ${teacherEnglishLabels(t)[0]}` : ""}
                         </span>
