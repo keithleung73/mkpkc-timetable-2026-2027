@@ -627,14 +627,77 @@ const F = teacher("F", "己");
     "已刪陳麗嫻星期四第一節 1D 中國語文",
   );
   assert.ok(
+    live.lessons.some(
+      (l) =>
+        l.teacherIds.includes("鵠") &&
+        l.day === "thu" &&
+        l.periodId === "p2" &&
+        l.classIds.includes("5E") &&
+        l.subject.includes("公民") &&
+        l.roomId === "504A" &&
+        l.kind !== "meeting",
+    ),
+    "鄧鵠耀星期四第二節按 10-09 總表係 5E 公民 504A",
+  );
+  assert.ok(
     !live.lessons.some(
       (l) =>
         l.teacherIds.includes("鵠") &&
         l.day === "thu" &&
-        ["p2", "p3", "p5", "p7"].includes(l.periodId) &&
+        ["p3", "p5", "p7"].includes(l.periodId) &&
         l.kind !== "meeting",
     ),
-    "鄧鵠耀星期四第二、三、五、七節無課堂（範本橫向合併幽靈課已清）",
+    "鄧鵠耀星期四第三、五、七節仍無課堂（範本橫向合併幽靈課已清）",
+  );
+  assert.ok(
+    live.lessons.some(
+      (l) =>
+        l.teacherIds.includes("言") &&
+        l.day === "tue" &&
+        l.periodId === "p6" &&
+        l.subject.includes("數一") &&
+        l.roomId === "N201",
+    ),
+    "周柏言星期二第六節按 10-09 總表係中六數一 N201",
+  );
+  assert.ok(
+    !live.lessons.some(
+      (l) => l.teacherIds.includes("言") && l.day === "mon" && l.periodId === "p9" && l.kind !== "meeting",
+    ),
+    "周柏言星期一第九節不應再有中六數一",
+  );
+  assert.ok(
+    live.lessons.some(
+      (l) =>
+        l.teacherIds.includes("言") &&
+        l.day === "thu" &&
+        l.periodId === "p8" &&
+        /數一/.test(l.subject) &&
+        /數二|M2/.test(l.subject),
+    ),
+    "周柏言星期四第八節按 10-09 總表係中四 M1、M2",
+  );
+  assert.ok(
+    live.lessons.some(
+      (l) =>
+        l.teacherIds.includes("永") &&
+        l.day === "mon" &&
+        l.periodId === "p7" &&
+        /數二|M2/.test(l.subject) &&
+        l.classIds.includes("4A"),
+    ),
+    "張永泰星期一第七節按 10-09 總表係中四數二",
+  );
+  assert.ok(
+    live.lessons.some(
+      (l) =>
+        l.teacherIds.includes("永") &&
+        l.day === "mon" &&
+        l.periodId === "p8" &&
+        /數二|M2/.test(l.subject) &&
+        l.classIds.includes("4A"),
+    ),
+    "張永泰星期一第八節按 10-09 總表係中四數二",
   );
   assert.ok(
     !live.lessons.some(
