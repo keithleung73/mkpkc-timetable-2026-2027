@@ -1,5 +1,5 @@
 import { DAYS, SCHOOL_YEAR, SUBJECT_ABBR } from "./constants";
-import type { CoverAssignment, CoverPlan, CoverSlot } from "./cover";
+import { isCoverWaived, type CoverAssignment, type CoverPlan, type CoverSlot } from "./cover";
 import { classNames, roomName, teacherById } from "./queries";
 import type { DayId, ScheduleData } from "./types";
 
@@ -96,6 +96,7 @@ type RawLine = {
   coverTeacherName: string;
   leftover: boolean;
   combine: boolean;
+  waived: boolean;
 };
 
 function rawLines(plan: CoverPlan): RawLine[] {
@@ -124,6 +125,7 @@ function rawLines(plan: CoverPlan): RawLine[] {
       coverTeacherName: cover?.coverTeacherName ?? "",
       leftover: !cover,
       combine: Boolean(cover?.combine),
+      waived: cover ? isCoverWaived(cover) : false,
     });
   };
 
@@ -145,6 +147,7 @@ function sameGroup(a: RawLine, b: RawLine) {
     a.coverTeacherId === b.coverTeacherId &&
     a.leftover === b.leftover &&
     a.combine === b.combine &&
+    a.waived === b.waived &&
     a.subject === b.subject &&
     a.roomId === b.roomId &&
     [...a.classIds].sort().join(",") === [...b.classIds].sort().join(",")
@@ -182,12 +185,12 @@ export function coverPdfRows(plan: CoverPlan, data: ScheduleData): CoverPdfRow[]
       showDate: index === 0,
       teacher: first.absenteeName,
       showTeacher,
-      action: first.combine ? "合班" : "代堂",
+      action: first.waived ? "不用代堂" : first.combine ? "合班" : "代堂",
       periods,
       classSubjectRoom: `${classLabel(data, first.classIds)} ${subjectShort(first.subject)} ${room}`,
-      coverTeacher: first.leftover ? "" : first.coverTeacherName,
-      arrangement: first.leftover ? "" : first.combine ? "合班（不計節數）" : "即日代堂",
-      remark: first.leftover ? "未能編配" : first.combine ? "不計節數" : "",
+      coverTeacher: first.leftover ? "" : first.waived ? "不適用" : first.coverTeacherName,
+      arrangement: first.leftover ? "" : first.waived ? "不用代堂" : first.combine ? "合班（不計節數）" : "即日代堂",
+      remark: first.leftover ? "未能編配" : first.waived ? "該節不用代堂" : first.combine ? "不計節數" : "",
     };
   });
 }
