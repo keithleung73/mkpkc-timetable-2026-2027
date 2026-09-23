@@ -142,7 +142,7 @@ const 乙 = teacher("乙", "乙老師");
 {
   const live = JSON.parse(readFileSync("data/schedule.json", "utf8")) as ScheduleData;
   assert.equal(isOccupied(live, "振", "thu", "p4"), false, "正式課表：陳振華星期四第四節空堂");
-  assert.equal(teachingLessonsOnDay(live, "振", "thu").length, 7, "正式課表：星期四原有 7 堂");
+  assert.equal(teachingLessonsOnDay(live, "振", "thu").length, 6, "正式課表：星期四原有 6 堂");
   const p7 = live.lessons.find(
     (l) =>
       l.day === "thu" &&

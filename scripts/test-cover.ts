@@ -631,10 +631,31 @@ const F = teacher("F", "己");
       (l) =>
         l.teacherIds.includes("鵠") &&
         l.day === "thu" &&
-        ["p2", "p3", "p5"].includes(l.periodId) &&
+        ["p2", "p3", "p5", "p7"].includes(l.periodId) &&
         l.kind !== "meeting",
     ),
-    "已刪鄧鵠耀星期四第二、三、五節",
+    "鄧鵠耀星期四第二、三、五、七節無課堂（範本橫向合併幽靈課已清）",
+  );
+  assert.ok(
+    !live.lessons.some(
+      (l) =>
+        l.teacherIds.includes("鵠") &&
+        l.day === "wed" &&
+        l.periodId === "p3" &&
+        l.classIds.includes("2D"),
+    ),
+    "鄧鵠耀星期三第三節不應有由星期一複製嘅 2D 公經社",
+  );
+  const 鵠mon = live.lessons.filter((l) => l.teacherIds.includes("鵠") && l.day === "mon" && l.kind !== "meeting");
+  assert.ok(
+    鵠mon.some((l) => l.periodId === "p3" && l.classIds.includes("2D")),
+    "鄧鵠耀星期一第三節仍係 2D 公經社",
+  );
+  assert.ok(
+    live.lessons.some(
+      (l) => l.teacherIds.includes("鵠") && l.day === "wed" && l.periodId === "p1" && l.classIds.includes("6E"),
+    ),
+    "鄧鵠耀星期三第一節仍係 6E 公民",
   );
 }
 

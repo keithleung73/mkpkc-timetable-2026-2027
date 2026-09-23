@@ -65,12 +65,15 @@ const HOME_ROOMS: Record<string, string> = {
 
 function expandMerges(ws: XLSX.WorkSheet, matrix: string[][]) {
   for (const m of ws["!merges"] || []) {
+    // Official sheets inherit a template that horizontally merges 早會／小息／午膳
+    // across Mon–Thu. If that row later holds a real lesson, spreading the merge
+    // copies Monday's class onto empty Tue/Wed/Thu cells.
+    // Only expand vertical merges (double periods in one column).
+    if (m.s.c !== m.e.c) continue;
     const val = matrix[m.s.r]?.[m.s.c] ?? "";
     for (let r = m.s.r; r <= m.e.r; r++) {
       if (!matrix[r]) matrix[r] = [];
-      for (let c = m.s.c; c <= m.e.c; c++) {
-        if (!String(matrix[r][c] ?? "").trim()) matrix[r][c] = val;
-      }
+      if (!String(matrix[r][m.s.c] ?? "").trim()) matrix[r][m.s.c] = val;
     }
   }
 }

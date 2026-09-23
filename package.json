@@ -16,6 +16,7 @@
     "test:homeroom": "tsx scripts/test-homeroom.ts",
     "test:swap": "tsx scripts/test-swap.ts",
     "test:calendar": "tsx scripts/test-calendar.ts",
+    "test:parse": "tsx scripts/test-parse-timetable.ts",
     "test:records": "tsx scripts/test-teacher-records.ts",
     "encrypt-data": "tsx scripts/encrypt-schedule.ts",
     "test:access": "tsx scripts/test-site-access.ts"
