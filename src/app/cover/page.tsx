@@ -24,7 +24,10 @@ import {
   assignmentKey,
   buildCoverDatesByTeacher,
   COVER_AVOID_TEACHER_NAMES,
+  COVER_NOT_APPLICABLE_ID,
+  COVER_NOT_APPLICABLE_LABEL,
   eligibleCoverTeachers,
+  isCoverWaived,
   generateCoverPlan,
   hkTodayIso,
   MAX_CONSECUTIVE_COVER_DAYS,
@@ -194,9 +197,16 @@ function Inner() {
     if (next.slots.length === 0) {
       toast.message("所選同事當日無需要代嘅堂");
     } else if (next.leftover.length > 0) {
-      toast.warning(`已編 ${next.assignments.length} 堂，仍有 ${next.leftover.length} 堂未能編配`);
+      const assigned = next.assignments.filter((a) => !isCoverWaived(a)).length;
+      toast.warning(`已編 ${assigned} 堂，仍有 ${next.leftover.length} 堂未能編配`);
     } else {
-      toast.success(`已編配 ${next.assignments.length} 堂代堂`);
+      const waived = next.assignments.filter((a) => isCoverWaived(a)).length;
+      const assigned = next.assignments.length - waived;
+      toast.success(
+        waived > 0
+          ? `已編配 ${assigned} 堂代堂，${waived} 堂不適用`
+          : `已編配 ${assigned} 堂代堂`,
+      );
     }
   };
 
@@ -320,7 +330,7 @@ function Inner() {
           <CardDescription>病假／事假：請假無返扣分，代堂加分。公假不計算 ±。揀人只睇結餘，唔睇科目。</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-          <p>病假／事假：請假同事每堂 −1；成功代堂同事每堂 +1。未能編配嘅堂，請假人仍然扣分。</p>
+          <p>病假／事假：請假同事每堂 −1；成功代堂同事每堂 +1。未能編配嘅堂，請假人仍然扣分。代堂同事可選「不適用」，即該節不用找人代，亦不計 ±。</p>
           <p>08:00 班主任節（一至四 08:00–08:25，五 08:00–08:15）都要找人代；只當 0.5 節代堂。若該班仍有另一位班主任在，則不用另找人。班主任節不計入老師當日正規堂數。</p>
           <p>公假：仍會編代堂，但請假人同代堂人都不加減分數。</p>
           <p>病假／事假較多（結餘較負）者優先代堂，其後先睇當日原有堂數。</p>
@@ -781,7 +791,11 @@ function PlanTable({
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Badge>{dayLabel(plan.day)}</Badge>
         <span className="text-muted-foreground">
-          需代 {plan.slots.length} 堂 · 已編 {plan.assignments.length} · 未編 {plan.leftover.length}
+          需代 {plan.slots.length} 堂 · 已編 {plan.assignments.filter((a) => !isCoverWaived(a)).length}
+          {plan.assignments.some((a) => isCoverWaived(a))
+            ? ` · 不適用 ${plan.assignments.filter((a) => isCoverWaived(a)).length}`
+            : ""}
+          {" · "}未編 {plan.leftover.length}
         </span>
       </div>
 
@@ -820,7 +834,7 @@ function PlanTable({
                 pickCtx,
               );
               return (
-                <tr key={key} className="border-t">
+                <tr key={key} className={isCoverWaived(a) ? "border-t bg-muted/40" : "border-t"}>
                   <td className="px-3 py-2 whitespace-nowrap">
                     {periodLabel(a.periodId)}
                     <div className="text-xs text-muted-foreground">
@@ -849,7 +863,7 @@ function PlanTable({
                   </td>
                   <td className="px-3 py-2">
                     <CoverTeacherSelect
-                      value={a.coverTeacherId}
+                      value={isCoverWaived(a) ? COVER_NOT_APPLICABLE_ID : a.coverTeacherId}
                       options={options}
                       extras={extras}
                       onChange={(id) => onChange(reassignCover(data, plan, key, id, balances, history))}
@@ -904,16 +918,15 @@ function PlanTable({
                     ) : null}
                   </td>
                   <td className="px-3 py-2">
+                    <CoverTeacherSelect
+                      options={options}
+                      extras={extras}
+                      placeholder={options.length === 0 && extras.length === 0 ? "不適用／無人可代" : "人手指定"}
+                      onChange={(id) => onChange(reassignCover(data, plan, key, id, balances, history))}
+                    />
                     {options.length === 0 && extras.length === 0 ? (
-                      <span className="text-xs text-destructive">無人可代</span>
-                    ) : (
-                      <CoverTeacherSelect
-                        options={options}
-                        extras={extras}
-                        placeholder="人手指定"
-                        onChange={(id) => onChange(reassignCover(data, plan, key, id, balances, history))}
-                      />
-                    )}
+                      <div className="mt-1 text-xs text-destructive">無人可代，可選不適用</div>
+                    ) : null}
                   </td>
                   <td className="px-3 py-2 text-xs text-destructive">未能自動編配</td>
                 </tr>
@@ -976,6 +989,11 @@ function CoverTeacherSelect({
   placeholder?: string;
   onChange: (id: string) => void;
 }) {
+  const selected =
+    value === COVER_NOT_APPLICABLE_ID
+      ? `${COVER_NOT_APPLICABLE_LABEL}（該節不用代堂）`
+      : [...options, ...extras].find((o) => o.teacher.id === value);
+  const selectedText = typeof selected === "string" ? selected : selected ? coverOptionLabel(selected) : undefined;
   return (
     <Select
       value={value}
@@ -986,9 +1004,12 @@ function CoverTeacherSelect({
       }}
     >
       <SelectTrigger className="w-56">
-        <SelectValue placeholder={placeholder} />
+        <SelectValue placeholder={placeholder}>{selectedText}</SelectValue>
       </SelectTrigger>
       <SelectContent className="max-h-72">
+        <SelectGroup>
+          <SelectItem value={COVER_NOT_APPLICABLE_ID}>{COVER_NOT_APPLICABLE_LABEL}（該節不用代堂）</SelectItem>
+        </SelectGroup>
         {options.length > 0 ? (
           <SelectGroup>
             {extras.length > 0 ? <SelectLabel>可自動編配</SelectLabel> : null}

@@ -1,6 +1,6 @@
 import { dayLabel, periodLabel } from "./constants";
 import { addDaysIso, mondayOfWeekIso, weekdayFromIsoDate } from "./cover";
-import type { SavedCoverPlan } from "./cover";
+import { isCoverWaived, type SavedCoverPlan } from "./cover";
 import { coverWeight } from "./homeroom";
 import { leaveKindLabel, type LeaveKind } from "./leave";
 import type { ConfirmedSwap } from "./swap-records";
@@ -15,7 +15,7 @@ export type DateRange = {
 
 export type TeacherRecordKind = "swap" | "cover";
 
-export type TeacherRecordRole = "leave" | "partner" | "absentee" | "cover" | "uncovered" | "combine";
+export type TeacherRecordRole = "leave" | "partner" | "absentee" | "cover" | "uncovered" | "combine" | "waived";
 
 export type TeacherRecordRow = {
   id: string;
@@ -211,6 +211,27 @@ function pushCoverRows(
 
   for (const a of plan.assignments) {
     const kind = plan.leaveKinds?.[a.absenteeId];
+    if (isCoverWaived(a)) {
+      if (!teacherId || a.absenteeId === teacherId) {
+        out.push({
+          id: `${plan.id}|waived|${a.periodId}|${a.absenteeId}`,
+          kind: "cover",
+          date: plan.date,
+          periodId: a.periodId,
+          periodText: periodLabel(a.periodId),
+          teacherId: a.absenteeId,
+          teacherName: a.absenteeName,
+          role: "waived",
+          roleLabel: "該節不用代堂",
+          leaveKind: kind,
+          subjects: [a.subject],
+          classIds: a.classIds,
+          counterpartName: "不適用",
+          detail: [leaveKindLabel(kind), a.reason || "不適用，該節不用代堂"].filter(Boolean).join(" · "),
+        });
+      }
+      continue;
+    }
     if (!teacherId || a.absenteeId === teacherId) {
       out.push({
         id: `${plan.id}|absentee|${a.periodId}|${a.absenteeId}`,
@@ -307,6 +328,7 @@ export function summarizeTeacherRecords(rows: TeacherRecordRow[]) {
     covering: covering.length,
     combine: rows.filter((r) => r.role === "combine").length,
     uncovered: rows.filter((r) => r.role === "uncovered").length,
+    waived: rows.filter((r) => r.role === "waived").length,
     coveringPeriods: covering.reduce((sum, r) => sum + coverWeight(r.periodId), 0),
     absenteePeriods: absentee
       .filter((r) => r.roleLabel !== "請假由人合班")
@@ -340,7 +362,11 @@ export function teacherRecordSheetRows(rows: TeacherRecordRow[]): string[][] {
       r.leaveKind ? leaveKindLabel(r.leaveKind) : "",
       r.periodText,
       r.kind === "cover"
-        ? String(r.role === "combine" || r.roleLabel === "請假由人合班" ? 0 : coverWeight(r.periodId))
+        ? String(
+            r.role === "combine" || r.role === "waived" || r.roleLabel === "請假由人合班"
+              ? 0
+              : coverWeight(r.periodId),
+          )
         : "",
       r.subjects.join("、"),
       r.classIds.join("、"),

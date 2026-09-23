@@ -778,7 +778,9 @@ function teacherCoveringPeriod(
 ) {
   const plan = coverPlanOnDate(plans, date);
   return (
-    plan?.assignments.some((a) => a.coverTeacherId === teacherId && a.periodId === periodId) ?? false
+    plan?.assignments.some(
+      (a) => a.coverTeacherId === teacherId && a.periodId === periodId && !a.waived,
+    ) ?? false
   );
 }
 

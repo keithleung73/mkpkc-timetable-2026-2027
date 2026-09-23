@@ -3,8 +3,11 @@ import { readFileSync } from "node:fs";
 import {
   applyBalances,
   applyConfirmedCovers,
+  assignmentKey,
+  COVER_NOT_APPLICABLE_ID,
   eligibleCoverTeachers,
   generateCoverPlan,
+  isCoverWaived,
   isOccupied,
   manualCoverTeachers,
   mergeCoverSlotIntoPlan,
@@ -12,6 +15,7 @@ import {
   MAX_OWN_LESSONS,
   ownTeachingLoadOnDay,
   PTH_DRAMA_COMBINE_REASON,
+  reassignCover,
   slotsToCover,
   undoBalances,
   validateCoverPlan,
@@ -719,6 +723,39 @@ const F = teacher("F", "己");
       (l) => l.teacherIds.includes("鵠") && l.day === "wed" && l.periodId === "p1" && l.classIds.includes("6E"),
     ),
     "鄧鵠耀星期三第一節仍係 6E 公民",
+  );
+}
+
+{
+  const data = schedule(
+    [A, B],
+    [lesson("abs-p1", "mon", "p1", "A"), lesson("abs-p3", "mon", "p3", "A")],
+  );
+  const auto = generateCoverPlan(data, "mon", "2026-08-31", ["A"], { B: -2 });
+  assert.equal(auto.assignments.length, 2);
+  const key = assignmentKey(auto.assignments[0]!);
+  const waived = reassignCover(data, auto, key, COVER_NOT_APPLICABLE_ID, { B: -2 });
+  assert.ok(waived.assignments.some((a) => isCoverWaived(a)), "可人手標該節不用代堂");
+  assert.equal(waived.leftover.length, 0);
+  assert.equal(validateCoverPlan(data, waived, { B: -2 }), null);
+  const next = applyBalances({}, waived);
+  assert.equal(next.A, -1, "不適用嗰節請假人唔扣分");
+  assert.equal(next.B, 1, "只計真正有人代嘅堂");
+  const occupied = applyConfirmedCovers(data, "2026-08-31", [waived]);
+  assert.ok(
+    !occupied.lessons.some((l) => l.teacherIds.includes(COVER_NOT_APPLICABLE_ID)),
+    "不適用唔佔用任何人",
+  );
+  const kept = generateCoverPlan(data, "mon", "2026-08-31", ["A"], { B: -2 }, [], undefined, waived);
+  assert.ok(kept.assignments.some((a) => isCoverWaived(a)), "再產生要保留不適用");
+  const leftoverPlan = { ...auto, assignments: [], leftover: auto.slots };
+  const fromLeft = reassignCover(data, leftoverPlan, key, COVER_NOT_APPLICABLE_ID, {});
+  assert.ok(fromLeft.assignments.some((a) => isCoverWaived(a)));
+  assert.equal(fromLeft.leftover.length, 1, "其餘未編堂仍係 leftover");
+  const rows = coverPdfRows(waived, data);
+  assert.ok(
+    rows.some((r) => r.coverTeacher === "不適用" && r.arrangement === "不用代堂"),
+    "PDF 要寫不適用／不用代堂",
   );
 }
 

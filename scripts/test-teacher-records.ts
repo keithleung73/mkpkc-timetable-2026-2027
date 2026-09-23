@@ -68,6 +68,41 @@ const plan: SavedCoverPlan = {
   ],
 };
 
+const waivedPlan: SavedCoverPlan = {
+  id: "cover-waived",
+  confirmedAt: "2026-09-05T00:00:00.000Z",
+  day: "thu",
+  date: "2026-09-10",
+  absentees: ["振"],
+  leaveKinds: { 振: "sick" },
+  slots: [
+    {
+      periodId: "p6",
+      classIds: ["2D"],
+      subject: "數學",
+      roomId: "305",
+      teacherId: "振",
+      teacherName: "陳振華",
+    },
+  ],
+  assignments: [
+    {
+      periodId: "p6",
+      classIds: ["2D"],
+      subject: "數學",
+      roomId: "305",
+      absenteeId: "振",
+      absenteeName: "陳振華",
+      coverTeacherId: "__na__",
+      coverTeacherName: "不適用",
+      coverBalanceBefore: 0,
+      reason: "不適用，該節不用代堂",
+      waived: true,
+    },
+  ],
+  leftover: [],
+};
+
 const combinePlan: SavedCoverPlan = {
   id: "cover-combine",
   confirmedAt: "2026-09-05T00:00:00.000Z",
@@ -163,6 +198,16 @@ const combinePlan: SavedCoverPlan = {
   assert.equal(summarizeTeacherRecords(彤).absenteePeriods, 0);
   const combineSheet = teacherRecordSheetRows(泰);
   assert.ok(combineSheet.some((line) => line.includes("合班（不計節數）") && line.includes("0")));
+
+  const waived = collectTeacherRecords([], [waivedPlan], "振", rangeFromPreset("day", "2026-09-10"));
+  assert.equal(waived.length, 1);
+  assert.equal(waived[0]?.role, "waived");
+  assert.equal(waived[0]?.roleLabel, "該節不用代堂");
+  assert.equal(waived[0]?.counterpartName, "不適用");
+  assert.equal(summarizeTeacherRecords(waived).absenteePeriods, 0);
+  assert.equal(summarizeTeacherRecords(waived).coveringPeriods, 0);
+  const waivedSheet = teacherRecordSheetRows(waived);
+  assert.ok(waivedSheet.some((line) => line.includes("該節不用代堂") && line.includes("0")));
 }
 
 console.log("teacher records query ok");

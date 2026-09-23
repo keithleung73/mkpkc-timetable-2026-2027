@@ -37,6 +37,11 @@ export type CoverSlot = {
   teacherName: string;
 };
 
+/** 代堂同事選「不適用」：該節不用找人代，亦不計 ±。 */
+export const COVER_NOT_APPLICABLE_ID = "__na__";
+export const COVER_NOT_APPLICABLE_LABEL = "不適用";
+export const COVER_NOT_APPLICABLE_REASON = "不適用，該節不用代堂";
+
 export type CoverAssignment = {
   periodId: string;
   classIds: string[];
@@ -50,7 +55,29 @@ export type CoverAssignment = {
   reason: string;
   /** 普通話／戲劇由在場另一位老師合班：列入安排但不計節數 */
   combine?: boolean;
+  /** 人手標成不用代堂：不佔人、不計 ± */
+  waived?: boolean;
 };
+
+export function isCoverWaived(a: { waived?: boolean; coverTeacherId?: string }): boolean {
+  return Boolean(a.waived) || a.coverTeacherId === COVER_NOT_APPLICABLE_ID;
+}
+
+export function toWaivedAssignment(slot: CoverSlot): CoverAssignment {
+  return {
+    periodId: slot.periodId,
+    classIds: slot.classIds,
+    subject: slot.subject,
+    roomId: slot.roomId,
+    absenteeId: slot.teacherId,
+    absenteeName: slot.teacherName,
+    coverTeacherId: COVER_NOT_APPLICABLE_ID,
+    coverTeacherName: COVER_NOT_APPLICABLE_LABEL,
+    coverBalanceBefore: 0,
+    reason: COVER_NOT_APPLICABLE_REASON,
+    waived: true,
+  };
+}
 
 export type CoverPlan = {
   day: DayId;
@@ -127,7 +154,9 @@ export function buildCoverDatesByTeacher(
     if (excludeDate && plan.date === excludeDate) continue;
     if (!weekdayFromIsoDate(plan.date)) continue;
     const ids = new Set(
-      plan.assignments.filter((a) => !a.combine).map((a) => a.coverTeacherId),
+      plan.assignments
+        .filter((a) => !a.combine && !isCoverWaived(a) && a.coverTeacherId)
+        .map((a) => a.coverTeacherId),
     );
     for (const id of ids) {
       let set = map.get(id);
@@ -230,6 +259,7 @@ export function applyConfirmedCovers(
   if (!plan || plan.assignments.length === 0) return data;
   const added: Lesson[] = [];
   for (const a of plan.assignments) {
+    if (isCoverWaived(a) || !a.coverTeacherId) continue;
     if (isOccupied(data, a.coverTeacherId, plan.day, a.periodId)) continue;
     added.push({
       id: `cover:${plan.date}:${a.periodId}:${a.coverTeacherId}:${a.absenteeId}:${[...a.classIds].sort().join(",")}`,
@@ -380,7 +410,7 @@ export function isPthDramaCombinePartner(
 
 export function assignedCoverLoad(assignments: CoverAssignment[], teacherId: string): number {
   return assignments
-    .filter((a) => a.coverTeacherId === teacherId && !a.combine)
+    .filter((a) => a.coverTeacherId === teacherId && !a.combine && !isCoverWaived(a))
     .reduce((sum, a) => sum + coverWeight(a.periodId), 0);
 }
 
@@ -424,7 +454,11 @@ export type EligibleCover = {
 };
 
 function takenCoverIdsThisPeriod(alreadyAssigned: CoverAssignment[], periodId: string) {
-  return new Set(alreadyAssigned.filter((a) => a.periodId === periodId).map((a) => a.coverTeacherId));
+  return new Set(
+    alreadyAssigned
+      .filter((a) => a.periodId === periodId && !isCoverWaived(a) && a.coverTeacherId)
+      .map((a) => a.coverTeacherId),
+  );
 }
 
 /** 硬限制：請假、該節已有課／已代、一日代堂超過兩堂。人手指定都要守。合班搭檔可例外。 */
@@ -649,6 +683,10 @@ export function generateCoverPlan(
         teacherId: a.absenteeId,
         teacherName: a.absenteeName,
       };
+      if (isCoverWaived(a)) {
+        assignments.push(toWaivedAssignment(seedSlot));
+        continue;
+      }
       if (coverHardBlockReason(data, day, absentees, seedSlot, assignments, a.coverTeacherId)) {
         continue;
       }
@@ -673,7 +711,7 @@ export function generateCoverPlan(
     set.add(date);
   };
   for (const a of assignments) {
-    if (a.combine) continue;
+    if (a.combine || isCoverWaived(a)) continue;
     working[a.coverTeacherId] = (working[a.coverTeacherId] ?? 0) + coverWeight(a.periodId);
     creditCoverDay(a.coverTeacherId);
   }
@@ -821,6 +859,14 @@ export function reassignCover(
   if (!slot) return plan;
 
   const others = plan.assignments.filter((a) => assignmentKey(a) !== targetKey);
+  if (newTeacherId === COVER_NOT_APPLICABLE_ID) {
+    const assignments = sortByPeriod(plan.day, [...others, toWaivedAssignment(slot)]);
+    const leftover = sortByPeriod(
+      plan.day,
+      plan.slots.filter((s) => !assignments.some((a) => assignmentKey(a) === slotKey(s))),
+    );
+    return { ...plan, assignments, leftover };
+  }
   const absentees = new Set(plan.absentees);
   const ctx: CoverPickContext = {
     date: plan.date,
@@ -881,6 +927,10 @@ export function validateCoverPlan(
       teacherId: a.absenteeId,
       teacherName: a.absenteeName,
     };
+    if (isCoverWaived(a)) {
+      soFar.push({ ...a, waived: true });
+      continue;
+    }
     const blocked = coverHardBlockReason(data, plan.day, absentees, slot, soFar, a.coverTeacherId);
     if (blocked) {
       return `${a.coverTeacherName} 唔符合代堂規則（${periodLabelFromConstants(a.periodId)}：${blocked}）`;
@@ -898,7 +948,7 @@ export function applyBalances(balances: CoverBalances, plan: CoverPlan): CoverBa
   const next = { ...balances };
   const covered = new Set(plan.assignments.map(assignmentKey));
   for (const a of plan.assignments) {
-    if (a.combine || !absenteeCountsBalance(plan, a.absenteeId)) continue;
+    if (a.combine || isCoverWaived(a) || !absenteeCountsBalance(plan, a.absenteeId)) continue;
     const w = coverWeight(a.periodId);
     next[a.absenteeId] = (next[a.absenteeId] ?? 0) - w;
     next[a.coverTeacherId] = (next[a.coverTeacherId] ?? 0) + w;
@@ -915,7 +965,7 @@ export function undoBalances(balances: CoverBalances, plan: CoverPlan): CoverBal
   const next = { ...balances };
   const covered = new Set(plan.assignments.map(assignmentKey));
   for (const a of plan.assignments) {
-    if (a.combine || !absenteeCountsBalance(plan, a.absenteeId)) continue;
+    if (a.combine || isCoverWaived(a) || !absenteeCountsBalance(plan, a.absenteeId)) continue;
     const w = coverWeight(a.periodId);
     next[a.absenteeId] = (next[a.absenteeId] ?? 0) + w;
     next[a.coverTeacherId] = (next[a.coverTeacherId] ?? 0) - w;
