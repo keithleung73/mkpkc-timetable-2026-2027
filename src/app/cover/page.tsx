@@ -989,6 +989,11 @@ function CoverTeacherSelect({
   placeholder?: string;
   onChange: (id: string) => void;
 }) {
+  const selected =
+    value === COVER_NOT_APPLICABLE_ID
+      ? `${COVER_NOT_APPLICABLE_LABEL}（該節不用代堂）`
+      : [...options, ...extras].find((o) => o.teacher.id === value);
+  const selectedText = typeof selected === "string" ? selected : selected ? coverOptionLabel(selected) : undefined;
   return (
     <Select
       value={value}
@@ -999,7 +1004,7 @@ function CoverTeacherSelect({
       }}
     >
       <SelectTrigger className="w-56">
-        <SelectValue placeholder={placeholder} />
+        <SelectValue placeholder={placeholder}>{selectedText}</SelectValue>
       </SelectTrigger>
       <SelectContent className="max-h-72">
         <SelectGroup>
