@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { FileDown, Minus, Pencil, Plus, Repeat2 } from "lucide-react";
@@ -23,6 +23,7 @@ import {
 import {
   assignmentKey,
   buildCoverDatesByTeacher,
+  coverAbsenteeGroups,
   COVER_AVOID_TEACHER_NAMES,
   COVER_NOT_APPLICABLE_ID,
   COVER_NOT_APPLICABLE_LABEL,
@@ -41,9 +42,14 @@ import {
   formatCoverPoints,
   coverWeight,
   weekdayFromIsoDate,
+  sortCoverItemsByPeriod,
+  type CoverAbsenteeGroup,
+  type CoverAssignment,
   type CoverBalances,
   type CoverPickContext,
   type CoverPlan,
+  type CoverPlanView,
+  type CoverSlot,
   type EligibleCover,
   type SavedCoverPlan,
 } from "@/lib/cover";
@@ -339,7 +345,7 @@ function Inner() {
           <p>學校假期、統測、考試、深度學習周、陸運會、開放日、教師發展日等無堂日無需代堂。</p>
           <p>同一人唔可以連續兩節代堂（例如代完第三節就不能代第四節）；同自己原本課堂相鄰則可以。</p>
           <p>普通話／戲劇、英文對拆堂：若另一位老師在，由該老師合班，列入安排但不計代堂節數及 ±。雙方都請假則照常找人代。</p>
-          <p>已確認調堂會改當日佔用：被調去上課嘅同事該節不能代堂。已入帳／人手指定嘅代堂同樣佔用該節，之後電產生調堂或代堂唔會再派同一人同一節。CLP 可以調堂（調去 CLP／空堂）；CLP、聯咨會、首席會同部會本身唔擋代堂。</p>
+          <p>方案可按請假老師分開睇（每位獨立一組），或按節次一覽全日。已確認調堂會改當日佔用：被調去上課嘅同事該節不能代堂。已入帳／人手指定嘅代堂同樣佔用該節，之後電產生調堂或代堂唔會再派同一人同一節。CLP 可以調堂（調去 CLP／空堂）；CLP、聯咨會、首席會同部會本身唔擋代堂。</p>
           <p>
             盡量唔編：{COVER_AVOID_TEACHER_NAMES.join("、")}
             （無人可代時仍可編；亦可人手改派）。
@@ -757,6 +763,204 @@ function BalanceChip({ value }: { value: number }) {
   );
 }
 
+const COVER_PLAN_VIEW_KEY = "mkpkc.coverPlanView.v1";
+
+function useCoverPlanView(): [CoverPlanView, (next: CoverPlanView) => void] {
+  const [view, setView] = useState<CoverPlanView>("period");
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(COVER_PLAN_VIEW_KEY);
+      if (saved === "teacher" || saved === "period") setView(saved);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const update = (next: CoverPlanView) => {
+    setView(next);
+    try {
+      window.localStorage.setItem(COVER_PLAN_VIEW_KEY, next);
+    } catch {
+      /* ignore */
+    }
+  };
+  return [view, update];
+}
+
+function groupNeedCount(g: CoverAbsenteeGroup) {
+  return g.assignments.length + g.leftover.length;
+}
+
+function groupAssignedCount(g: CoverAbsenteeGroup) {
+  return g.assignments.filter((a) => !isCoverWaived(a)).length;
+}
+
+function groupWaivedCount(g: CoverAbsenteeGroup) {
+  return g.assignments.filter((a) => isCoverWaived(a)).length;
+}
+
+function rowsOfAbsenteeGroup(day: CoverPlan["day"], g: CoverAbsenteeGroup) {
+  return sortCoverItemsByPeriod(day, [
+    ...g.assignments.map((assignment) => ({
+      kind: "assigned" as const,
+      assignment,
+      periodId: assignment.periodId,
+      absenteeName: assignment.absenteeName,
+    })),
+    ...g.leftover.map((slot) => ({
+      kind: "leftover" as const,
+      slot,
+      periodId: slot.periodId,
+      teacherName: slot.teacherName,
+    })),
+  ]);
+}
+
+type PlanRowCtx = {
+  data: ScheduleData;
+  plan: CoverPlan;
+  absentees: Set<string>;
+  balances: CoverBalances;
+  history: SavedCoverPlan[];
+  pickCtx: CoverPickContext;
+  onChange: (plan: CoverPlan) => void;
+};
+
+function CoverPlanGrid({
+  hideAbsentee = false,
+  children,
+}: {
+  hideAbsentee?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <table className="w-full min-w-[52rem] text-sm">
+      <thead className="bg-muted/60 text-left">
+        <tr>
+          <th className="px-3 py-2 font-medium">節次</th>
+          <th className="px-3 py-2 font-medium">班／科／地點</th>
+          {hideAbsentee ? null : <th className="px-3 py-2 font-medium">請假</th>}
+          <th className="px-3 py-2 font-medium">代堂同事</th>
+          <th className="px-3 py-2 font-medium">原因</th>
+        </tr>
+      </thead>
+      <tbody>{children}</tbody>
+    </table>
+  );
+}
+
+function AssignedCoverRow({
+  a,
+  ctx,
+  hideAbsentee = false,
+}: {
+  a: CoverAssignment;
+  ctx: PlanRowCtx;
+  hideAbsentee?: boolean;
+}) {
+  const { data, plan, absentees, balances, history, pickCtx, onChange } = ctx;
+  const key = assignmentKey(a);
+  const others = plan.assignments.filter((x) => assignmentKey(x) !== key);
+  const slot = plan.slots.find((s) => slotKey(s) === key)!;
+  const options = eligibleCoverTeachers(data, plan.day, absentees, balances, slot, others, pickCtx);
+  const extras = manualCoverTeachers(data, plan.day, absentees, balances, slot, others, pickCtx);
+  return (
+    <tr className={isCoverWaived(a) ? "border-t bg-muted/40" : "border-t"}>
+      <td className="px-3 py-2 whitespace-nowrap">
+        {periodLabel(a.periodId)}
+        <div className="text-xs text-muted-foreground">
+          {formatTimeRange(plan.day, a.periodId)}
+          {a.combine
+            ? " · 合班不計節數"
+            : coverWeight(a.periodId) !== 1
+              ? ` · ${coverWeight(a.periodId)} 節`
+              : ""}
+        </div>
+      </td>
+      <td className="px-3 py-2">
+        <div>{classNames(data, a.classIds)}</div>
+        <div className="text-xs text-muted-foreground">
+          {a.subject} · {roomName(data, a.roomId)}
+        </div>
+      </td>
+      {hideAbsentee ? null : (
+        <td className="px-3 py-2">
+          {a.absenteeName}
+          {plan.leaveKinds?.[a.absenteeId] ? (
+            <div className="text-xs text-muted-foreground">
+              {leaveKindLabel(plan.leaveKinds[a.absenteeId])}
+              {plan.leaveKinds[a.absenteeId] === "official" ? " · 不計±" : ""}
+            </div>
+          ) : null}
+        </td>
+      )}
+      <td className="px-3 py-2">
+        <CoverTeacherSelect
+          value={isCoverWaived(a) ? COVER_NOT_APPLICABLE_ID : a.coverTeacherId}
+          options={options}
+          extras={extras}
+          onChange={(id) => onChange(reassignCover(data, plan, key, id, balances, history))}
+        />
+      </td>
+      <td className="px-3 py-2 text-xs text-muted-foreground">{a.reason}</td>
+    </tr>
+  );
+}
+
+function LeftoverCoverRow({
+  s,
+  ctx,
+  hideAbsentee = false,
+}: {
+  s: CoverSlot;
+  ctx: PlanRowCtx;
+  hideAbsentee?: boolean;
+}) {
+  const { data, plan, absentees, balances, history, pickCtx, onChange } = ctx;
+  const key = slotKey(s);
+  const options = eligibleCoverTeachers(data, plan.day, absentees, balances, s, plan.assignments, pickCtx);
+  const extras = manualCoverTeachers(data, plan.day, absentees, balances, s, plan.assignments, pickCtx);
+  return (
+    <tr className="border-t bg-destructive/5">
+      <td className="px-3 py-2 whitespace-nowrap">
+        {periodLabel(s.periodId)}
+        <div className="text-xs text-muted-foreground">
+          {formatTimeRange(plan.day, s.periodId)}
+          {coverWeight(s.periodId) !== 1 ? ` · ${coverWeight(s.periodId)} 節` : ""}
+        </div>
+      </td>
+      <td className="px-3 py-2">
+        <div>{classNames(data, s.classIds)}</div>
+        <div className="text-xs text-muted-foreground">
+          {s.subject} · {roomName(data, s.roomId)}
+        </div>
+      </td>
+      {hideAbsentee ? null : (
+        <td className="px-3 py-2">
+          {s.teacherName}
+          {plan.leaveKinds?.[s.teacherId] ? (
+            <div className="text-xs text-muted-foreground">
+              {leaveKindLabel(plan.leaveKinds[s.teacherId])}
+              {plan.leaveKinds[s.teacherId] === "official" ? " · 不計±" : ""}
+            </div>
+          ) : null}
+        </td>
+      )}
+      <td className="px-3 py-2">
+        <CoverTeacherSelect
+          options={options}
+          extras={extras}
+          placeholder={options.length === 0 && extras.length === 0 ? "不適用／無人可代" : "人手指定"}
+          onChange={(id) => onChange(reassignCover(data, plan, key, id, balances, history))}
+        />
+        {options.length === 0 && extras.length === 0 ? (
+          <div className="mt-1 text-xs text-destructive">無人可代，可選不適用</div>
+        ) : null}
+      </td>
+      <td className="px-3 py-2 text-xs text-destructive">未能自動編配</td>
+    </tr>
+  );
+}
+
 function PlanTable({
   plan,
   scheduleData,
@@ -785,6 +989,17 @@ function PlanTable({
     date: plan.date,
     coverDatesByTeacher: buildCoverDatesByTeacher(history, plan.date),
   };
+  const [view, setView] = useCoverPlanView();
+  const groups = coverAbsenteeGroups(plan);
+  const rowCtx: PlanRowCtx = {
+    data,
+    plan,
+    absentees,
+    balances,
+    history,
+    pickCtx,
+    onChange,
+  };
 
   return (
     <div className="space-y-4">
@@ -797,144 +1012,81 @@ function PlanTable({
             : ""}
           {" · "}未編 {plan.leftover.length}
         </span>
+        <div className="ml-auto inline-flex rounded-lg border p-0.5">
+          <Button
+            type="button"
+            size="sm"
+            variant={view === "teacher" ? "default" : "ghost"}
+            aria-pressed={view === "teacher"}
+            onClick={() => setView("teacher")}
+          >
+            按請假老師
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={view === "period" ? "default" : "ghost"}
+            aria-pressed={view === "period"}
+            onClick={() => setView("period")}
+          >
+            按節次
+          </Button>
+        </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border">
-        <table className="w-full min-w-[52rem] text-sm">
-          <thead className="bg-muted/60 text-left">
-            <tr>
-              <th className="px-3 py-2 font-medium">節次</th>
-              <th className="px-3 py-2 font-medium">班／科／地點</th>
-              <th className="px-3 py-2 font-medium">請假</th>
-              <th className="px-3 py-2 font-medium">代堂同事</th>
-              <th className="px-3 py-2 font-medium">原因</th>
-            </tr>
-          </thead>
-          <tbody>
-            {plan.assignments.map((a) => {
-              const key = assignmentKey(a);
-              const others = plan.assignments.filter((x) => assignmentKey(x) !== key);
-              const slot = plan.slots.find((s) => slotKey(s) === key)!;
-              const options = eligibleCoverTeachers(
-                data,
-                plan.day,
-                absentees,
-                balances,
-                slot,
-                others,
-                pickCtx,
-              );
-              const extras = manualCoverTeachers(
-                data,
-                plan.day,
-                absentees,
-                balances,
-                slot,
-                others,
-                pickCtx,
-              );
-              return (
-                <tr key={key} className={isCoverWaived(a) ? "border-t bg-muted/40" : "border-t"}>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    {periodLabel(a.periodId)}
-                    <div className="text-xs text-muted-foreground">
-                      {formatTimeRange(plan.day, a.periodId)}
-                      {a.combine
-                        ? " · 合班不計節數"
-                        : coverWeight(a.periodId) !== 1
-                          ? ` · ${coverWeight(a.periodId)} 節`
-                          : ""}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div>{classNames(data, a.classIds)}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {a.subject} · {roomName(data, a.roomId)}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">
-                    {a.absenteeName}
-                    {plan.leaveKinds?.[a.absenteeId] ? (
-                      <div className="text-xs text-muted-foreground">
-                        {leaveKindLabel(plan.leaveKinds[a.absenteeId])}
-                        {plan.leaveKinds[a.absenteeId] === "official" ? " · 不計±" : ""}
-                      </div>
+      {view === "teacher" ? (
+        <div className="space-y-4">
+          {groups.map((g) => {
+            const teacher = data.teachers.find((t) => t.id === g.absenteeId);
+            const waived = groupWaivedCount(g);
+            return (
+              <div key={g.absenteeId} className="overflow-x-auto rounded-xl border">
+                <div className="flex flex-wrap items-baseline justify-between gap-2 border-b bg-muted/40 px-3 py-2">
+                  <div>
+                    <span className="font-medium">
+                      {g.absenteeName}
+                      {teacher?.code ? (
+                        <span className="font-normal text-muted-foreground">（{teacher.code}）</span>
+                      ) : null}
+                    </span>
+                    {g.leaveKind ? (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {leaveKindLabel(g.leaveKind)}
+                        {g.leaveKind === "official" ? " · 不計±" : ""}
+                      </span>
                     ) : null}
-                  </td>
-                  <td className="px-3 py-2">
-                    <CoverTeacherSelect
-                      value={isCoverWaived(a) ? COVER_NOT_APPLICABLE_ID : a.coverTeacherId}
-                      options={options}
-                      extras={extras}
-                      onChange={(id) => onChange(reassignCover(data, plan, key, id, balances, history))}
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">{a.reason}</td>
-                </tr>
-              );
-            })}
-            {plan.leftover.map((s) => {
-              const key = slotKey(s);
-              const options = eligibleCoverTeachers(
-                data,
-                plan.day,
-                absentees,
-                balances,
-                s,
-                plan.assignments,
-                pickCtx,
-              );
-              const extras = manualCoverTeachers(
-                data,
-                plan.day,
-                absentees,
-                balances,
-                s,
-                plan.assignments,
-                pickCtx,
-              );
-              return (
-                <tr key={key} className="border-t bg-destructive/5">
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    {periodLabel(s.periodId)}
-                    <div className="text-xs text-muted-foreground">
-                      {formatTimeRange(plan.day, s.periodId)}
-                      {coverWeight(s.periodId) !== 1 ? ` · ${coverWeight(s.periodId)} 節` : ""}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div>{classNames(data, s.classIds)}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {s.subject} · {roomName(data, s.roomId)}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">
-                    {s.teacherName}
-                    {plan.leaveKinds?.[s.teacherId] ? (
-                      <div className="text-xs text-muted-foreground">
-                        {leaveKindLabel(plan.leaveKinds[s.teacherId])}
-                        {plan.leaveKinds[s.teacherId] === "official" ? " · 不計±" : ""}
-                      </div>
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-2">
-                    <CoverTeacherSelect
-                      options={options}
-                      extras={extras}
-                      placeholder={options.length === 0 && extras.length === 0 ? "不適用／無人可代" : "人手指定"}
-                      onChange={(id) => onChange(reassignCover(data, plan, key, id, balances, history))}
-                    />
-                    {options.length === 0 && extras.length === 0 ? (
-                      <div className="mt-1 text-xs text-destructive">無人可代，可選不適用</div>
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-destructive">未能自動編配</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    需代 {groupNeedCount(g)} 堂 · 已編 {groupAssignedCount(g)}
+                    {waived > 0 ? ` · 不適用 ${waived}` : ""}
+                    {g.leftover.length > 0 ? ` · 未編 ${g.leftover.length}` : ""}
+                  </span>
+                </div>
+                <CoverPlanGrid hideAbsentee>
+                  {rowsOfAbsenteeGroup(plan.day, g).map((row) =>
+                    row.kind === "assigned" ? (
+                      <AssignedCoverRow key={assignmentKey(row.assignment)} a={row.assignment} ctx={rowCtx} hideAbsentee />
+                    ) : (
+                      <LeftoverCoverRow key={slotKey(row.slot)} s={row.slot} ctx={rowCtx} hideAbsentee />
+                    ),
+                  )}
+                </CoverPlanGrid>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border">
+          <CoverPlanGrid>
+            {plan.assignments.map((a) => (
+              <AssignedCoverRow key={assignmentKey(a)} a={a} ctx={rowCtx} />
+            ))}
+            {plan.leftover.map((s) => (
+              <LeftoverCoverRow key={slotKey(s)} s={s} ctx={rowCtx} />
+            ))}
+          </CoverPlanGrid>
+        </div>
+      )}
 
       <div className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
         入帳預覽：

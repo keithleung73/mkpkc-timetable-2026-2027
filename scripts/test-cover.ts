@@ -4,6 +4,7 @@ import {
   applyBalances,
   applyConfirmedCovers,
   assignmentKey,
+  coverAbsenteeGroups,
   COVER_NOT_APPLICABLE_ID,
   eligibleCoverTeachers,
   generateCoverPlan,
@@ -899,6 +900,40 @@ const F = teacher("F", "己");
   assert.ok(
     rows.some((r) => r.coverTeacher === "不適用" && r.arrangement === "不用代堂"),
     "PDF 要寫不適用／不用代堂",
+  );
+}
+
+{
+  const data = schedule(
+    [A, B, C],
+    [
+      lesson("a-p1", "mon", "p1", "A"),
+      lesson("a-p5", "mon", "p5", "A"),
+      lesson("c-p2", "mon", "p2", "C"),
+      lesson("c-p8", "mon", "p8", "C"),
+    ],
+  );
+  const plan = generateCoverPlan(data, "mon", "2026-08-31", ["A", "C"], { B: -4 });
+  const groups = coverAbsenteeGroups(plan);
+  assert.equal(groups.length, 2, "兩位請假老師應分成兩組");
+  assert.deepEqual(
+    groups.map((g) => g.absenteeId),
+    ["A", "C"],
+    "組序跟請假名單",
+  );
+  const aGroup = groups.find((g) => g.absenteeId === "A");
+  const cGroup = groups.find((g) => g.absenteeId === "C");
+  assert.ok(aGroup);
+  assert.ok(cGroup);
+  assert.equal(aGroup!.assignments.length + aGroup!.leftover.length, 2);
+  assert.equal(cGroup!.assignments.length + cGroup!.leftover.length, 2);
+  assert.ok(
+    aGroup!.assignments.every((x) => x.absenteeId === "A") &&
+      aGroup!.leftover.every((x) => x.teacherId === "A"),
+  );
+  assert.ok(
+    cGroup!.assignments.every((x) => x.absenteeId === "C") &&
+      cGroup!.leftover.every((x) => x.teacherId === "C"),
   );
 }
 
