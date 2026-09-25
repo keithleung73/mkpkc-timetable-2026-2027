@@ -9,7 +9,7 @@ import {
   buildCoverDatesByTeacher,
   coverPlanOnDate,
   eligibleCoverTeachers,
-  pthDramaCombinePartnerIds,
+  unpaidCombinePartnerIds,
   weekdayFromIsoDate,
   type CoverAssignment,
   type CoverBalances,
@@ -75,7 +75,7 @@ export type CoverSuggestion = {
   sameSubject: boolean;
   teachesClass: boolean;
   lessonsToday: number;
-  /** 普通話／戲劇合班：該節有課仍可合班，不計節數 */
+  /** 普通話／戲劇或英文對拆合班：該節有課仍可合班，不計節數 */
   combine?: boolean;
 };
 
@@ -485,7 +485,7 @@ function findNormalSwaps(
   return matches;
 }
 
-function unitHasPthDramaCombine(
+function unitHasUnpaidCombine(
   data: ScheduleData,
   unit: SwapUnit,
   leaveTeacherId: string,
@@ -496,7 +496,7 @@ function unitHasPthDramaCombine(
   for (const lesson of unit.lessons) {
     if (!lesson.teacherIds.includes(leaveTeacherId)) continue;
     if (
-      pthDramaCombinePartnerIds(
+      unpaidCombinePartnerIds(
         data,
         unit.day,
         {
@@ -877,10 +877,10 @@ export function planTeacherLeaveSwaps(
       };
     }
 
-    if (unit.kind === "normal") {
+    if (unit.kind === "normal" || unit.kind === "subject_pair") {
       const extraAbs = absenteesOnDate(unit.leaveDate, coverPlans, confirmedSwaps);
       extraAbs.add(teacherId);
-      if (unitHasPthDramaCombine(data, unit, teacherId, extraAbs)) {
+      if (unitHasUnpaidCombine(data, unit, teacherId, extraAbs)) {
         return {
           unit,
           status: "cover" as const,

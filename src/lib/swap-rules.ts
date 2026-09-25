@@ -1,7 +1,7 @@
 import { COVER_PERIOD_IDS } from "./constants";
 import { isClpSubject, isTeachingLesson, lessonOccupiesTeacher } from "./lesson-kind";
 import { classTokenMatches } from "./queries";
-import type { DayId, Lesson, ScheduleData } from "./types";
+import type { DayId, Lesson, ScheduleData, Teacher } from "./types";
 
 /** 調堂後同一班同一日同一科最多 3 堂（例如 4A 不能一日上四堂中文） */
 export const MAX_SAME_SUBJECT_PER_CLASS_PER_DAY = 3;
@@ -67,6 +67,66 @@ export function findPthDramaPartnerLesson(
         subjectKey(l.subject) === want,
     ) ?? null
   );
+}
+
+/** 正規英文課（唔計英增／深閱） */
+export function isEnglishSubject(subject: string): boolean {
+  const s = subject.replace(/\s+/g, "");
+  if (!s || /增潤|英增|深閱/.test(s)) return false;
+  return s === "英文" || s === "英國語文" || s === "英會" || s.includes("英文") || s.includes("英國語文");
+}
+
+function isEnglishSpeakingAssignmentLine(line: string): boolean {
+  const compact = line.replace(/\s+/g, "");
+  if (/增潤|英增|深閱/.test(compact)) return false;
+  return /英會|英文會話|英話|Speaking/i.test(line);
+}
+
+function speakingClassTokensFromLine(line: string): string[] {
+  return line
+    .split(/\s+/)
+    .map((raw) => raw.replace(/[（(][^）)]*[）)]/g, "").trim())
+    .filter((token) => /^[1-6][A-Za-z]/.test(token) && !/英|深|LCL|會|話|Speaking/i.test(token));
+}
+
+/** 該老師有冇教呢啲班嘅英文會話／對拆（睇職務表 英會／英話 行） */
+export function teacherTeachesEnglishSpeaking(teacher: Teacher, classIds: string[]): boolean {
+  return teacher.subjects.some((line) => {
+    if (!isEnglishSpeakingAssignmentLine(line)) return false;
+    return classesOverlap(speakingClassTokensFromLine(line), classIds);
+  });
+}
+
+function teacherSpeaksEnglishOnLesson(
+  data: ScheduleData,
+  teacherIds: string[],
+  classIds: string[],
+): boolean {
+  return teacherIds.some((id) => {
+    const teacher = data.teachers.find((t) => t.id === id);
+    return teacher ? teacherTeachesEnglishSpeaking(teacher, classIds) : false;
+  });
+}
+
+/** 同一節並行嘅英文對拆堂（英會老師同班英文老師） */
+export function findEnglishSpeakingPartnerLessons(
+  data: ScheduleData,
+  lesson: Pick<Lesson, "id" | "day" | "periodId" | "classIds" | "subject" | "teacherIds">,
+): Lesson[] {
+  if (!isEnglishSubject(lesson.subject)) return [];
+  const absenteeSpeaks = teacherSpeaksEnglishOnLesson(data, lesson.teacherIds, lesson.classIds);
+  return data.lessons.filter((other) => {
+    if (!isTeachingLesson(other)) return false;
+    if (other.day !== lesson.day || other.periodId !== lesson.periodId || other.id === lesson.id) {
+      return false;
+    }
+    if (!isEnglishSubject(other.subject)) return false;
+    if (!classesOverlap(other.classIds, lesson.classIds)) return false;
+    const partnerSpeaks =
+      teacherSpeaksEnglishOnLesson(data, other.teacherIds, lesson.classIds) ||
+      teacherSpeaksEnglishOnLesson(data, other.teacherIds, other.classIds);
+    return absenteeSpeaks || partnerSpeaks;
+  });
 }
 
 export function roomFreeIgnoring(

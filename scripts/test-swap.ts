@@ -421,6 +421,46 @@ const 乙 = teacher("乙", "乙老師");
 }
 
 {
+  const raman: Teacher = {
+    id: "KAUR",
+    name: "溫敏兒",
+    code: "KAUR",
+    subjects: ["英文", "4ABE(1) 4C 4D 英會"],
+  };
+  const ming: Teacher = {
+    id: "銘",
+    name: "郭家銘",
+    code: "銘",
+    subjects: ["英文", "4ABE(2) 4C 英文"],
+  };
+  const data = schedule(
+    [raman, ming],
+    [
+      lesson("kaur", "fri", "p5", "KAUR", { classIds: ["4C"], subject: "英文", roomId: "304A" }),
+      lesson("ming", "fri", "p5", "銘", { classIds: ["4C"], subject: "英文", roomId: "406" }),
+    ],
+  );
+  const plan = planTeacherLeaveSwaps(data, "KAUR", ["2026-09-11"], "2026-09-11");
+  const hit = plan.results.find((r) => r.unit.periodId === "p5");
+  assert.equal(hit?.status, "cover", "英文對拆應改為合班，不再調堂");
+  assert.ok(
+    hit?.coverSuggestions.some((c) => c.teacherId === "銘" && c.combine),
+    "4C 班英文老師應列作合班建議",
+  );
+}
+
+{
+  const live = JSON.parse(readFileSync("data/schedule.json", "utf8")) as ScheduleData;
+  const plan = planTeacherLeaveSwaps(live, "KAUR", ["2026-09-11"], "2026-09-11");
+  const p5 = plan.results.find((r) => r.unit.periodId === "p5");
+  assert.equal(p5?.status, "cover", "正式課表 4C 英文對拆應合班");
+  assert.ok(
+    p5?.coverSuggestions.some((c) => c.combine && c.teacherId === "銘"),
+    "正式課表 4C Raman 缺席由郭家銘合班",
+  );
+}
+
+{
   const 丙 = teacher("丙", "丙老師");
   const data = schedule(
     [振, 乙, 丙],
