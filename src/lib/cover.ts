@@ -307,6 +307,46 @@ export function assignmentKey(a: CoverAssignment) {
   });
 }
 
+/** 代堂方案顯示：按節次一覽，或按每位請假老師獨立分開睇 */
+export type CoverPlanView = "period" | "teacher";
+
+export type CoverAbsenteeGroup = {
+  absenteeId: string;
+  absenteeName: string;
+  leaveKind?: LeaveKind;
+  assignments: CoverAssignment[];
+  leftover: CoverSlot[];
+};
+
+export function coverAbsenteeGroups(plan: CoverPlan): CoverAbsenteeGroup[] {
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  const add = (id: string) => {
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    ids.push(id);
+  };
+  for (const id of plan.absentees) add(id);
+  for (const a of plan.assignments) add(a.absenteeId);
+  for (const s of plan.leftover) add(s.teacherId);
+
+  return ids
+    .map((id) => {
+      const assignments = plan.assignments.filter((a) => a.absenteeId === id);
+      const leftover = plan.leftover.filter((s) => s.teacherId === id);
+      const absenteeName =
+        assignments[0]?.absenteeName ?? leftover[0]?.teacherName ?? id;
+      return {
+        absenteeId: id,
+        absenteeName,
+        leaveKind: plan.leaveKinds?.[id],
+        assignments,
+        leftover,
+      };
+    })
+    .filter((g) => g.assignments.length + g.leftover.length > 0);
+}
+
 export function slotsToCover(data: ScheduleData, day: DayId, absenteeIds: string[]): CoverSlot[] {
   const abs = new Set(absenteeIds);
   const coverPeriods = new Set(coverPeriodIdsForDay(day));
@@ -744,7 +784,7 @@ function toAssignment(
   };
 }
 
-function sortByPeriod<T extends { periodId: string; absenteeName?: string; teacherName?: string }>(
+export function sortCoverItemsByPeriod<T extends { periodId: string; absenteeName?: string; teacherName?: string }>(
   day: DayId,
   items: T[],
 ) {
@@ -889,8 +929,8 @@ export function generateCoverPlan(
       ...(leaveKinds ?? {}),
     }),
     slots,
-    assignments: sortByPeriod(day, assignments),
-    leftover: sortByPeriod(day, leftover),
+    assignments: sortCoverItemsByPeriod(day, assignments),
+    leftover: sortCoverItemsByPeriod(day, leftover),
   };
 }
 
@@ -951,11 +991,11 @@ export function mergeCoverSlotIntoPlan(
       combine,
     }),
   );
-  const assignments = sortByPeriod(day, [...keep, ...newAssignments]);
+  const assignments = sortCoverItemsByPeriod(day, [...keep, ...newAssignments]);
   const slotMap = new Map((existing?.slots ?? []).map((s) => [slotKey(s), s]));
   for (const slot of targetSlots) slotMap.set(slotKey(slot), slot);
-  const slots = sortByPeriod(day, [...slotMap.values()]);
-  const leftover = sortByPeriod(
+  const slots = sortCoverItemsByPeriod(day, [...slotMap.values()]);
+  const leftover = sortCoverItemsByPeriod(
     day,
     slots.filter((s) => !assignments.some((a) => assignmentKey(a) === slotKey(s))),
   );
@@ -985,8 +1025,8 @@ export function reassignCover(
 
   const others = plan.assignments.filter((a) => assignmentKey(a) !== targetKey);
   if (newTeacherId === COVER_NOT_APPLICABLE_ID) {
-    const assignments = sortByPeriod(plan.day, [...others, toWaivedAssignment(slot)]);
-    const leftover = sortByPeriod(
+    const assignments = sortCoverItemsByPeriod(plan.day, [...others, toWaivedAssignment(slot)]);
+    const leftover = sortCoverItemsByPeriod(
       plan.day,
       plan.slots.filter((s) => !assignments.some((a) => assignmentKey(a) === slotKey(s))),
     );
@@ -1013,8 +1053,8 @@ export function reassignCover(
         ? `人手指定，當日原有 ${pick.ownLessons} 堂`
         : pickReason(pick),
   });
-  const assignments = sortByPeriod(plan.day, [...others, nextAssignment]);
-  const leftover = sortByPeriod(
+  const assignments = sortCoverItemsByPeriod(plan.day, [...others, nextAssignment]);
+  const leftover = sortCoverItemsByPeriod(
     plan.day,
     plan.slots.filter((s) => !assignments.some((a) => assignmentKey(a) === slotKey(s))),
   );
@@ -1039,7 +1079,7 @@ export function validateCoverPlan(
   const absentees = new Set(plan.absentees);
   const seen = new Set<string>();
   const soFar: CoverAssignment[] = [];
-  for (const a of sortByPeriod(plan.day, plan.assignments)) {
+  for (const a of sortCoverItemsByPeriod(plan.day, plan.assignments)) {
     const key = assignmentKey(a);
     if (seen.has(key)) return "同一堂重複編配";
     seen.add(key);
