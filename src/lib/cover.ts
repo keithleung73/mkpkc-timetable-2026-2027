@@ -2,13 +2,23 @@ import { COVER_PERIOD_IDS, periodLabel as periodLabelFromConstants } from "./con
 import { coverWeight, formatCoverPoints, HOMEROOM_PERIOD_ID, isHomeroomLesson } from "./homeroom";
 import { leaveCountsBalance, type LeaveKind } from "./leave";
 import { isTeachingLesson, lessonOccupiesTeacher } from "./lesson-kind";
-import { classesOverlap, findPthDramaPartnerLesson, isPthDramaSubject } from "./swap-rules";
+import {
+  classesOverlap,
+  findEnglishSpeakingPartnerLessons,
+  findPthDramaPartnerLesson,
+  isEnglishSubject,
+  isPthDramaSubject,
+  teacherTeachesEnglishSpeaking,
+} from "./swap-rules";
 import type { DayId, Lesson, ScheduleData, Teacher } from "./types";
 
 export { coverWeight, formatCoverPoints };
 
 /** 普通話／戲劇合班：有安排但不計 ±、每日代堂上限、連續代堂日 */
 export const PTH_DRAMA_COMBINE_REASON = "普通話／戲劇合班，不計節數";
+
+/** 英文會話對拆合班：有安排但不計 ±、每日代堂上限、連續代堂日 */
+export const ENGLISH_SPEAKING_COMBINE_REASON = "英文對拆合班，不計節數";
 
 export const MAX_OWN_LESSONS = 6;
 
@@ -408,6 +418,99 @@ export function isPthDramaCombinePartner(
   return pthDramaCombinePartnerIds(data, day, slot, absentees).includes(teacherId);
 }
 
+/** 該節英文對拆堂，在場另一位老師可合班（雙方都請假則無人可合班） */
+export function englishSpeakingCombinePartnerIds(
+  data: ScheduleData,
+  day: DayId,
+  slot: Pick<CoverSlot, "periodId" | "classIds" | "subject" | "teacherId">,
+  absentees: Set<string>,
+): string[] {
+  if (!isEnglishSubject(slot.subject)) return [];
+  const absentee = data.teachers.find((t) => t.id === slot.teacherId);
+  const absenteeSpeaks = absentee ? teacherTeachesEnglishSpeaking(absentee, slot.classIds) : false;
+  const partners: { id: string; speaks: boolean }[] = [];
+  const seen = new Set<string>();
+  const add = (id: string, speaks: boolean) => {
+    if (!id || id === slot.teacherId || absentees.has(id) || seen.has(id)) return;
+    seen.add(id);
+    partners.push({ id, speaks });
+  };
+
+  const partnerLessons = findEnglishSpeakingPartnerLessons(data, {
+    id: `combine-probe:${slot.teacherId}:${slot.periodId}`,
+    day,
+    periodId: slot.periodId,
+    classIds: slot.classIds,
+    subject: slot.subject,
+    teacherIds: [slot.teacherId],
+  });
+  for (const lesson of partnerLessons) {
+    for (const id of lesson.teacherIds) {
+      const teacher = data.teachers.find((t) => t.id === id);
+      const speaks = teacher
+        ? teacherTeachesEnglishSpeaking(teacher, slot.classIds) ||
+          teacherTeachesEnglishSpeaking(teacher, lesson.classIds)
+        : false;
+      if (absenteeSpeaks || speaks) add(id, speaks);
+    }
+  }
+
+  partners.sort((a, b) => {
+    const rank = (speaks: boolean) => (absenteeSpeaks ? (speaks ? 1 : 0) : speaks ? 0 : 1);
+    const byRole = rank(a.speaks) - rank(b.speaks);
+    if (byRole !== 0) return byRole;
+    const nameA = data.teachers.find((t) => t.id === a.id)?.name ?? a.id;
+    const nameB = data.teachers.find((t) => t.id === b.id)?.name ?? b.id;
+    return nameA.localeCompare(nameB, "zh-Hant");
+  });
+  return partners.map((p) => p.id);
+}
+
+export function unpaidCombinePartnerIds(
+  data: ScheduleData,
+  day: DayId,
+  slot: Pick<CoverSlot, "periodId" | "classIds" | "subject" | "teacherId">,
+  absentees: Set<string>,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of [
+    ...pthDramaCombinePartnerIds(data, day, slot, absentees),
+    ...englishSpeakingCombinePartnerIds(data, day, slot, absentees),
+  ]) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+export function isUnpaidCombinePartner(
+  data: ScheduleData,
+  day: DayId,
+  slot: Pick<CoverSlot, "periodId" | "classIds" | "subject" | "teacherId">,
+  absentees: Set<string>,
+  teacherId: string,
+): boolean {
+  return unpaidCombinePartnerIds(data, day, slot, absentees).includes(teacherId);
+}
+
+export function unpaidCombineReason(
+  data: ScheduleData,
+  day: DayId,
+  slot: Pick<CoverSlot, "periodId" | "classIds" | "subject" | "teacherId">,
+  absentees: Set<string>,
+  teacherId: string,
+): string {
+  if (pthDramaCombinePartnerIds(data, day, slot, absentees).includes(teacherId)) {
+    return PTH_DRAMA_COMBINE_REASON;
+  }
+  if (englishSpeakingCombinePartnerIds(data, day, slot, absentees).includes(teacherId)) {
+    return ENGLISH_SPEAKING_COMBINE_REASON;
+  }
+  return PTH_DRAMA_COMBINE_REASON;
+}
+
 export function assignedCoverLoad(assignments: CoverAssignment[], teacherId: string): number {
   return assignments
     .filter((a) => a.coverTeacherId === teacherId && !a.combine && !isCoverWaived(a))
@@ -449,8 +552,9 @@ export type EligibleCover = {
   consecutiveDayRisk: boolean;
   /** 人手指定：唔符合自動編配（例如原有堂數較多／連堂）但仍可代 */
   manualOnly?: boolean;
-  /** 普通話／戲劇合班搭檔：該節有課仍可合班，不計節數 */
+  /** 普通話／戲劇或英文對拆合班搭檔：該節有課仍可合班，不計節數 */
   combine?: boolean;
+  combineReason?: string;
 };
 
 function takenCoverIdsThisPeriod(alreadyAssigned: CoverAssignment[], periodId: string) {
@@ -470,7 +574,7 @@ export function coverHardBlockReason(
   alreadyAssigned: CoverAssignment[],
   teacherId: string,
 ): string | null {
-  const combine = isPthDramaCombinePartner(data, day, slot, absentees, teacherId);
+  const combine = isUnpaidCombinePartner(data, day, slot, absentees, teacherId);
   if (absentees.has(teacherId)) return "請假同事不能代堂";
   if (teacherId === slot.teacherId) return "請假同事不能代自己";
   if (takenCoverIdsThisPeriod(alreadyAssigned, slot.periodId).has(teacherId)) {
@@ -491,6 +595,7 @@ function toEligibleCover(
   ctx: CoverPickContext | undefined,
   manualOnly: boolean,
   combine = false,
+  combineReason?: string,
 ): EligibleCover {
   return {
     teacher,
@@ -502,6 +607,7 @@ function toEligibleCover(
       : false,
     manualOnly,
     combine,
+    combineReason,
   };
 }
 
@@ -516,17 +622,28 @@ export function eligibleCoverTeachers(
 ): EligibleCover[] {
   const out: EligibleCover[] = [];
   for (const teacher of data.teachers) {
-    const combine = isPthDramaCombinePartner(data, day, slot, absentees, teacher.id);
+    const combine = isUnpaidCombinePartner(data, day, slot, absentees, teacher.id);
     if (coverHardBlockReason(data, day, absentees, slot, alreadyAssigned, teacher.id)) continue;
     const own = ownTeachingLoadOnDay(data, teacher.id, day);
     if (!combine && own > MAX_OWN_LESSONS) continue;
     if (!combine && consecutiveCoverViolation(day, slot.periodId, alreadyAssigned, teacher.id)) {
       continue;
     }
-    out.push(toEligibleCover(data, day, balances, teacher, ctx, false, combine));
+    out.push(
+      toEligibleCover(
+        data,
+        day,
+        balances,
+        teacher,
+        ctx,
+        false,
+        combine,
+        combine ? unpaidCombineReason(data, day, slot, absentees, teacher.id) : undefined,
+      ),
+    );
   }
 
-  // 1) 普通話／戲劇合班搭檔  2) 避開指定同事  3) 避免連續代堂超兩日  4) 負數結餘優先  5) 當日堂數
+  // 1) 合班搭檔  2) 避開指定同事  3) 避免連續代堂超兩日  4) 負數結餘優先  5) 當日堂數
   out.sort((a, b) => {
     if (Boolean(a.combine) !== Boolean(b.combine)) {
       return Number(Boolean(b.combine)) - Number(Boolean(a.combine));
@@ -573,7 +690,7 @@ export function manualCoverTeachers(
 }
 
 function pickReason(pick: EligibleCover) {
-  if (pick.combine) return PTH_DRAMA_COMBINE_REASON;
+  if (pick.combine) return pick.combineReason || PTH_DRAMA_COMBINE_REASON;
   const sign = pick.balance < 0 ? "負數結餘優先" : pick.balance === 0 ? "結餘為零" : "結餘較低";
   const notes: string[] = [];
   if (pick.consecutiveDayRisk) notes.push("本週已連續代堂");
@@ -691,10 +808,16 @@ export function generateCoverPlan(
         continue;
       }
       const combine =
-        a.combine || isPthDramaCombinePartner(data, day, seedSlot, absentees, a.coverTeacherId);
+        a.combine || isUnpaidCombinePartner(data, day, seedSlot, absentees, a.coverTeacherId);
       assignments.push(
         combine
-          ? { ...a, combine: true, reason: a.reason || PTH_DRAMA_COMBINE_REASON }
+          ? {
+              ...a,
+              combine: true,
+              reason:
+                a.reason ||
+                unpaidCombineReason(data, day, seedSlot, absentees, a.coverTeacherId),
+            }
           : a,
       );
     }
@@ -719,7 +842,7 @@ export function generateCoverPlan(
   const remaining = slots.filter((s) => !assignments.some((a) => assignmentKey(a) === slotKey(s)));
   const still: CoverSlot[] = [];
   for (const slot of remaining) {
-    const partnerId = pthDramaCombinePartnerIds(data, day, slot, absentees)[0];
+    const partnerId = unpaidCombinePartnerIds(data, day, slot, absentees)[0];
     const partner = partnerId ? data.teachers.find((t) => t.id === partnerId) : undefined;
     if (
       partner &&
@@ -729,7 +852,7 @@ export function generateCoverPlan(
         toAssignment(slot, {
           teacher: partner,
           balance: working[partner.id] ?? 0,
-          reason: PTH_DRAMA_COMBINE_REASON,
+          reason: unpaidCombineReason(data, day, slot, absentees, partner.id),
           combine: true,
         }),
       );
@@ -815,14 +938,16 @@ export function mergeCoverSlotIntoPlan(
   );
   if (blocked) return { error: `${coverTeacher.name} ${blocked}` };
   const combine = targetSlots.some((slot) =>
-    isPthDramaCombinePartner(data, day, slot, absentSet, coverTeacherId),
+    isUnpaidCombinePartner(data, day, slot, absentSet, coverTeacherId),
   );
 
   const newAssignments = targetSlots.map((slot) =>
     toAssignment(slot, {
       teacher: coverTeacher,
       balance: 0,
-      reason: combine ? PTH_DRAMA_COMBINE_REASON : "調堂頁即時揀建議",
+      reason: combine
+        ? unpaidCombineReason(data, day, slot, absentSet, coverTeacherId)
+        : "調堂頁即時揀建議",
       combine,
     }),
   );
@@ -883,7 +1008,7 @@ export function reassignCover(
   const nextAssignment = toAssignment(slot, {
     ...pick,
     reason: pick.combine
-      ? PTH_DRAMA_COMBINE_REASON
+      ? pick.combineReason || unpaidCombineReason(data, plan.day, slot, absentees, newTeacherId)
       : pick.manualOnly
         ? `人手指定，當日原有 ${pick.ownLessons} 堂`
         : pickReason(pick),

@@ -14,6 +14,7 @@ import {
   MAX_COVER_LOAD_PER_DAY,
   MAX_OWN_LESSONS,
   ownTeachingLoadOnDay,
+  ENGLISH_SPEAKING_COMBINE_REASON,
   PTH_DRAMA_COMBINE_REASON,
   reassignCover,
   slotsToCover,
@@ -536,6 +537,148 @@ const F = teacher("F", "己");
     false,
     "合班唔計連續代堂日",
   );
+}
+
+{
+  const raman: Teacher = {
+    id: "KAUR",
+    name: "溫敏兒",
+    code: "KAUR",
+    subjects: ["英文", "4ABE(1) 4ABE(2) 4ABE(3) 4C 4D 英會"],
+  };
+  const ming: Teacher = {
+    id: "銘",
+    name: "郭家銘",
+    code: "銘",
+    subjects: ["英文", "4ABE(2) 4C 英文"],
+  };
+  const hon: Teacher = {
+    id: "韓",
+    name: "韓卓穎",
+    code: "韓",
+    subjects: ["英文", "4ABE(1) 4D 英文"],
+  };
+  const data = schedule(
+    [raman, ming, hon, A, B],
+    [
+      lesson("kaur-4c", "fri", "p5", "KAUR", { classIds: ["4C"], subject: "英文", roomId: "304A" }),
+      lesson("ming-4c", "fri", "p5", "銘", { classIds: ["4C"], subject: "英文", roomId: "406" }),
+      lesson("kaur-4ab", "mon", "p5", "KAUR", {
+        classIds: ["4A", "4B", "4EG1"],
+        subject: "英文",
+        roomId: "304A",
+      }),
+      lesson("ming-4ab", "mon", "p5", "銘", {
+        classIds: ["4A", "4B", "4EG1"],
+        subject: "英文",
+        roomId: "613",
+      }),
+      lesson("hon-4ab", "mon", "p5", "韓", {
+        classIds: ["4A", "4B", "4EG1"],
+        subject: "英文",
+        roomId: "610",
+      }),
+      lesson("a-p1", "fri", "p1", "A"),
+      lesson("a-p3", "fri", "p3", "A"),
+    ],
+  );
+
+  const ramanLeave = generateCoverPlan(data, "fri", "2026-09-11", ["KAUR"], { 銘: -9, B: 0 });
+  const p5 = ramanLeave.assignments.find((a) => a.periodId === "p5");
+  assert.equal(p5?.coverTeacherId, "銘");
+  assert.equal(p5?.combine, true);
+  assert.equal(p5?.reason, ENGLISH_SPEAKING_COMBINE_REASON);
+  assert.equal(applyBalances({}, ramanLeave).KAUR ?? 0, 0, "英文對拆合班不計請假人 ±");
+  assert.equal(applyBalances({}, ramanLeave).銘 ?? 0, 0, "英文對拆合班不計代堂人 ±");
+  assert.equal(validateCoverPlan(data, ramanLeave, {}), null);
+
+  const mingLeave = generateCoverPlan(data, "fri", "2026-09-11", ["銘"], { KAUR: -9 });
+  const mingP5 = mingLeave.assignments.find((a) => a.periodId === "p5");
+  assert.equal(mingP5?.coverTeacherId, "KAUR");
+  assert.equal(mingP5?.combine, true);
+  assert.equal(mingP5?.reason, ENGLISH_SPEAKING_COMBINE_REASON);
+
+  const both = generateCoverPlan(data, "fri", "2026-09-11", ["KAUR", "銘"], { B: -8, A: 0 });
+  assert.ok(!both.assignments.some((a) => a.combine), "雙方請假就不能合班");
+
+  const withLoad = generateCoverPlan(data, "fri", "2026-09-11", ["KAUR", "A"], { 銘: -9, B: 0 });
+  const byMing = withLoad.assignments.filter((a) => a.coverTeacherId === "銘");
+  assert.ok(byMing.some((a) => a.combine && a.periodId === "p5"));
+  assert.equal(
+    byMing.filter((a) => !a.combine).length,
+    MAX_COVER_LOAD_PER_DAY,
+    "英文對拆合班不佔一日兩堂代堂上限",
+  );
+
+  const ab = generateCoverPlan(data, "mon", "2026-09-07", ["KAUR"], {});
+  const abP5 = ab.assignments.find((a) => a.periodId === "p5");
+  assert.ok(["銘", "韓"].includes(abP5?.coverTeacherId ?? ""), "4AB 英會缺席由班英文老師合班");
+  assert.equal(abP5?.combine, true);
+
+  const mingAb = generateCoverPlan(data, "mon", "2026-09-07", ["銘"], {});
+  const mingAbP5 = mingAb.assignments.find((a) => a.periodId === "p5");
+  assert.equal(mingAbP5?.coverTeacherId, "KAUR", "班英文老師缺席由英會老師合班，唔係另一組英文老師");
+  assert.equal(mingAbP5?.combine, true);
+
+  const merged = mergeCoverSlotIntoPlan(data, null, "2026-09-11", "fri", "KAUR", "p5", "銘", "sick");
+  assert.ok(!("error" in merged));
+  if ("error" in merged) throw new Error(String(merged.error));
+  assert.equal(merged.assignments[0]?.combine, true);
+  assert.equal(merged.assignments[0]?.reason, ENGLISH_SPEAKING_COMBINE_REASON);
+
+  const noSpeak = schedule(
+    [ming, hon, A],
+    [
+      lesson("ming-only", "tue", "p3", "銘", { classIds: ["4A"], subject: "英文" }),
+      lesson("hon-only", "tue", "p3", "韓", { classIds: ["4A"], subject: "英文" }),
+    ],
+  );
+  const isolated = generateCoverPlan(noSpeak, "tue", "2026-09-08", ["銘"], { 韓: -9, A: 0 });
+  assert.ok(
+    !isolated.assignments.some((a) => a.combine),
+    "兩個班英文老師並行但無人教英會，唔應該互合",
+  );
+}
+
+{
+  const live = JSON.parse(readFileSync("data/schedule.json", "utf8")) as ScheduleData;
+  const expectCombine = (
+    day: Lesson["day"],
+    date: string,
+    absenteeId: string,
+    periodId: string,
+    partnerId: string,
+    label: string,
+  ) => {
+    const plan = generateCoverPlan(live, day, date, [absenteeId], {});
+    const hit = plan.assignments.find(
+      (a) => a.periodId === periodId && a.absenteeId === absenteeId,
+    );
+    assert.equal(hit?.coverTeacherId, partnerId, label);
+    assert.equal(hit?.combine, true, `${label} 應合班`);
+    assert.equal(hit?.reason, ENGLISH_SPEAKING_COMBINE_REASON, `${label} 理由`);
+  };
+
+  expectCombine("fri", "2026-09-11", "KAUR", "p5", "銘", "4C Raman 缺 → 郭家銘合班");
+  expectCombine("fri", "2026-09-11", "銘", "p5", "KAUR", "4C 郭家銘缺 → Raman 合班");
+  expectCombine("wed", "2026-09-09", "KAUR", "p5", "韓", "4D Raman 缺 → 韓卓穎合班");
+  expectCombine("mon", "2026-09-07", "DARI", "p3", "詠", "5D Dari 缺 → 黃詠淇合班");
+  expectCombine("fri", "2026-09-11", "DARI", "p3", "慈", "5C Dari 缺 → 劉倩慈合班");
+  expectCombine("fri", "2026-09-11", "WAY", "p3", "廖", "6C Wayne 缺 → 廖淑君合班");
+  expectCombine("wed", "2026-09-09", "WAY", "p1", "日", "6D Wayne 缺 → 李日東合班");
+
+  const ab = generateCoverPlan(live, "mon", "2026-09-07", ["KAUR"], {});
+  const abP5 = ab.assignments.find((a) => a.periodId === "p5" && a.absenteeId === "KAUR");
+  assert.equal(abP5?.combine, true, "4AB Raman 缺席應合班");
+  assert.ok(
+    ["韓", "銘", "康", "ROIS"].includes(abP5?.coverTeacherId ?? ""),
+    `4AB 合班應係班英文老師，實際 ${abP5?.coverTeacherId}`,
+  );
+
+  const mingMon = generateCoverPlan(live, "mon", "2026-09-07", ["銘"], {});
+  const mingP5 = mingMon.assignments.find((a) => a.periodId === "p5" && a.absenteeId === "銘");
+  assert.equal(mingP5?.coverTeacherId, "KAUR", "4AB 郭家銘缺 → Raman 合班");
+  assert.equal(mingP5?.combine, true);
 }
 
 {
