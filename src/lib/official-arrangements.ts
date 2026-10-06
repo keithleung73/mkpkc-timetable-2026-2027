@@ -1,6 +1,8 @@
 import * as XLSX from "xlsx";
 import {
+  appendHeavyOwnLoadNote,
   applyBalances,
+  ownTeachingLoadOnDay,
   type CoverAssignment,
   type CoverBalances,
   type CoverDutyNote,
@@ -656,7 +658,10 @@ export function resolveOfficialArrangements(
         ? row.remark
           ? `合班，不計節數 · ${row.remark}`
           : "合班，不計節數"
-        : [row.leaveLabel || "代堂", row.remark].filter(Boolean).join(" · ") || "通知各部門代堂安排";
+        : appendHeavyOwnLoadNote(
+            [row.leaveLabel || "代堂", row.remark].filter(Boolean).join(" · ") || "通知各部門代堂安排",
+            counterpart ? ownTeachingLoadOnDay(data, counterpart.id, row.day) : 0,
+          );
 
     let plan = plansByDate.get(row.date);
     if (!plan) {

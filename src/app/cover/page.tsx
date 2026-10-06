@@ -27,8 +27,12 @@ import {
   COVER_AVOID_TEACHER_NAMES,
   COVER_NOT_APPLICABLE_ID,
   COVER_NOT_APPLICABLE_LABEL,
+  coverAssignmentHeavyOwnLessons,
   eligibleCoverTeachers,
+  heavyCoverTeachersOnPlan,
+  heavyOwnLoadNote,
   isCoverWaived,
+  isHeavyOwnLoad,
   generateCoverPlan,
   hkTodayIso,
   MAX_CONSECUTIVE_COVER_DAYS,
@@ -885,8 +889,16 @@ function AssignedCoverRow({
   const slot = plan.slots.find((s) => slotKey(s) === key)!;
   const options = eligibleCoverTeachers(data, plan.day, absentees, balances, slot, others, pickCtx);
   const extras = manualCoverTeachers(data, plan.day, absentees, balances, slot, others, pickCtx);
+  const heavyOwn = coverAssignmentHeavyOwnLessons(data, plan.day, a);
+  const heavyNote = heavyOwn != null ? heavyOwnLoadNote(heavyOwn) : null;
   return (
-    <tr className={isCoverWaived(a) ? "border-t bg-muted/40" : "border-t"}>
+    <tr
+      className={cn(
+        "border-t",
+        isCoverWaived(a) && "bg-muted/40",
+        heavyOwn != null && "bg-amber-50",
+      )}
+    >
       <td className="px-3 py-2 whitespace-nowrap">
         {periodLabel(a.periodId)}
         <div className="text-xs text-muted-foreground">
@@ -923,8 +935,23 @@ function AssignedCoverRow({
           extras={extras}
           onChange={(id) => onChange(reassignCover(data, plan, key, id, balances, history))}
         />
+        {heavyNote ? (
+          <div className="mt-1">
+            <Badge
+              variant="outline"
+              className="border-amber-400 bg-amber-100 text-amber-950"
+            >
+              備註：{heavyNote}
+            </Badge>
+          </div>
+        ) : null}
       </td>
-      <td className="px-3 py-2 text-xs text-muted-foreground">{a.reason}</td>
+      <td className="px-3 py-2 text-xs text-muted-foreground">
+        {a.reason}
+        {heavyNote && !a.reason.includes(heavyNote) ? (
+          <div className="mt-1 font-medium text-amber-900">{heavyNote}</div>
+        ) : null}
+      </td>
     </tr>
   );
 }
@@ -1014,6 +1041,7 @@ function PlanTable({
   };
   const [view, setView] = useCoverPlanView();
   const groups = coverAbsenteeGroups(plan);
+  const heavyCovers = heavyCoverTeachersOnPlan(data, plan);
   const rowCtx: PlanRowCtx = {
     data,
     plan,
@@ -1056,6 +1084,17 @@ function PlanTable({
           </Button>
         </div>
       </div>
+
+      {heavyCovers.length > 0 ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          備註：以下代堂老師當日已有 7 堂或以上正規課（不能自動代堂，人手／通知表仍可編）
+          {heavyCovers.map((t) => (
+            <span key={t.teacherId} className="ml-2 font-medium">
+              {t.teacherName}（{t.ownLessons}堂）
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       {view === "teacher" ? (
         <div className="space-y-4">
@@ -1148,7 +1187,9 @@ function PlanTable({
 }
 
 function coverOptionLabel(o: EligibleCover) {
-  return `${o.teacher.name}（${o.teacher.code}）${o.combine ? "合班不計" : o.balance}`;
+  const load =
+    !o.combine && isHeavyOwnLoad(o.ownLessons) ? ` · 當日${o.ownLessons}堂` : "";
+  return `${o.teacher.name}（${o.teacher.code}）${o.combine ? "合班不計" : o.balance}${load}`;
 }
 
 function CoverTeacherSelect({

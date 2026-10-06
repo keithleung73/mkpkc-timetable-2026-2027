@@ -22,6 +22,46 @@ export const ENGLISH_SPEAKING_COMBINE_REASON = "英文對拆合班，不計節�
 
 export const MAX_OWN_LESSONS = 6;
 
+/** 代堂老師當日正規課達呢個數：要備註／標示（自動編配已排除 > 6） */
+export function isHeavyOwnLoad(ownLessons: number): boolean {
+  return ownLessons > MAX_OWN_LESSONS;
+}
+
+export function heavyOwnLoadNote(ownLessons: number): string | null {
+  if (!isHeavyOwnLoad(ownLessons)) return null;
+  return `當日已有${ownLessons}堂正規課`;
+}
+
+export function appendHeavyOwnLoadNote(reason: string, ownLessons: number): string {
+  const note = heavyOwnLoadNote(ownLessons);
+  if (!note || reason.includes(note) || reason.includes("合班")) return reason;
+  return `${reason} · ${note}`;
+}
+
+export function coverAssignmentHeavyOwnLessons(
+  data: ScheduleData,
+  day: DayId,
+  assignment: Pick<CoverAssignment, "coverTeacherId" | "combine" | "waived">,
+): number | null {
+  if (assignment.combine || isCoverWaived(assignment)) return null;
+  const id = assignment.coverTeacherId;
+  if (!id || id.startsWith("ext:")) return null;
+  const own = ownTeachingLoadOnDay(data, id, day);
+  return isHeavyOwnLoad(own) ? own : null;
+}
+
+export function heavyCoverTeachersOnPlan(data: ScheduleData, plan: CoverPlan) {
+  const seen = new Set<string>();
+  const out: { teacherId: string; teacherName: string; ownLessons: number }[] = [];
+  for (const a of plan.assignments) {
+    const own = coverAssignmentHeavyOwnLessons(data, plan.day, a);
+    if (own == null || seen.has(a.coverTeacherId)) continue;
+    seen.add(a.coverTeacherId);
+    out.push({ teacherId: a.coverTeacherId, teacherName: a.coverTeacherName, ownLessons: own });
+  }
+  return out;
+}
+
 /** 同一代堂人一日內代堂總量不能超過呢個數（班主任節計 0.5） */
 export const MAX_COVER_LOAD_PER_DAY = 2;
 
@@ -746,6 +786,8 @@ function pickReason(pick: EligibleCover) {
   const notes: string[] = [];
   if (pick.consecutiveDayRisk) notes.push("本週已連續代堂");
   if (pick.avoidPreferred) notes.push("盡量少編名單");
+  const heavy = heavyOwnLoadNote(pick.ownLessons);
+  if (heavy) notes.push(heavy);
   const suffix = notes.length ? `；${notes.join("、")}` : "";
   return `${sign}（${pick.balance}），當日原有 ${pick.ownLessons} 堂${suffix}`;
 }
@@ -998,7 +1040,10 @@ export function mergeCoverSlotIntoPlan(
       balance: 0,
       reason: combine
         ? unpaidCombineReason(data, day, slot, absentSet, coverTeacherId)
-        : "調堂頁即時揀建議",
+        : appendHeavyOwnLoadNote(
+            "調堂頁即時揀建議",
+            ownTeachingLoadOnDay(data, coverTeacherId, day),
+          ),
       combine,
     }),
   );
@@ -1061,7 +1106,7 @@ export function reassignCover(
     reason: pick.combine
       ? pick.combineReason || unpaidCombineReason(data, plan.day, slot, absentees, newTeacherId)
       : pick.manualOnly
-        ? `人手指定，當日原有 ${pick.ownLessons} 堂`
+        ? appendHeavyOwnLoadNote(`人手指定，當日原有 ${pick.ownLessons} 堂`, pick.ownLessons)
         : pickReason(pick),
   });
   const assignments = sortCoverItemsByPeriod(plan.day, [...others, nextAssignment]);

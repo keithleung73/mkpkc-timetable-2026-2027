@@ -98,8 +98,8 @@ function TeacherRecordsInner() {
   );
   const teacher = data?.teachers.find((t) => t.id === teacherId) ?? null;
   const rows = useMemo(
-    () => collectTeacherRecords(swaps, plans, teacherId, range, kind),
-    [swaps, plans, teacherId, range, kind],
+    () => collectTeacherRecords(swaps, plans, teacherId, range, kind, data),
+    [swaps, plans, teacherId, range, kind, data],
   );
   const summary = useMemo(() => summarizeTeacherRecords(rows), [rows]);
 

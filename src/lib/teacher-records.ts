@@ -1,10 +1,16 @@
 import { dayLabel, periodLabel } from "./constants";
 import { addDaysIso, mondayOfWeekIso, weekdayFromIsoDate } from "./cover";
-import { isCoverWaived, type SavedCoverPlan } from "./cover";
+import {
+  coverAssignmentHeavyOwnLessons,
+  heavyOwnLoadNote,
+  isCoverWaived,
+  type SavedCoverPlan,
+} from "./cover";
 import { coverWeight } from "./homeroom";
 import { leaveKindLabel, type LeaveKind } from "./leave";
 import type { ConfirmedSwap } from "./swap-records";
 import { swapModeLabel } from "./swap-rules";
+import type { ScheduleData } from "./types";
 
 export type RecordRangeKind = "day" | "week" | "month" | "custom";
 
@@ -201,11 +207,16 @@ function pushSwapRows(
   }
 }
 
+function coverRowDetail(kind: LeaveKind | undefined, reason: string, extra?: string | null) {
+  return [leaveKindLabel(kind), reason, extra].filter(Boolean).join(" · ");
+}
+
 function pushCoverRows(
   out: TeacherRecordRow[],
   plan: SavedCoverPlan,
   teacherId: string | null,
   range: DateRange,
+  data?: ScheduleData | null,
 ) {
   if (!dateInRange(plan.date, range)) return;
 
@@ -247,10 +258,14 @@ function pushCoverRows(
         subjects: [a.subject],
         classIds: a.classIds,
         counterpartName: a.coverTeacherName,
-        detail: [leaveKindLabel(kind), a.reason].filter(Boolean).join(" · "),
+        detail: coverRowDetail(kind, a.reason),
       });
     }
     if (!teacherId || a.coverTeacherId === teacherId) {
+      const heavy =
+        data && !a.combine
+          ? heavyOwnLoadNote(coverAssignmentHeavyOwnLessons(data, plan.day, a) ?? 0)
+          : null;
       out.push({
         id: `${plan.id}|cover|${a.periodId}|${a.coverTeacherId}`,
         kind: "cover",
@@ -265,7 +280,7 @@ function pushCoverRows(
         subjects: [a.subject],
         classIds: a.classIds,
         counterpartName: a.absenteeName,
-        detail: [leaveKindLabel(kind), a.reason].filter(Boolean).join(" · "),
+        detail: coverRowDetail(kind, a.reason, heavy && !a.reason.includes(heavy) ? heavy : null),
       });
     }
   }
@@ -298,13 +313,14 @@ export function collectTeacherRecords(
   teacherId: string | null,
   range: DateRange,
   kind: "all" | TeacherRecordKind = "all",
+  data?: ScheduleData | null,
 ): TeacherRecordRow[] {
   const out: TeacherRecordRow[] = [];
   if (kind !== "cover") {
     for (const swap of swaps) pushSwapRows(out, swap, teacherId, range);
   }
   if (kind !== "swap") {
-    for (const plan of plans) pushCoverRows(out, plan, teacherId, range);
+    for (const plan of plans) pushCoverRows(out, plan, teacherId, range, data);
   }
   return out.sort(
     (a, b) =>
