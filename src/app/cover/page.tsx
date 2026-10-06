@@ -1170,7 +1170,7 @@ function CoverTeacherSelect({
     value &&
     value !== COVER_NOT_APPLICABLE_ID &&
     ![...options, ...extras].some((o) => o.teacher.id === value)
-      ? {
+      ? ({
           teacher: {
             id: value,
             name: currentLabel || (value.startsWith("ext:") ? value.slice(4) : value),
@@ -1178,7 +1178,10 @@ function CoverTeacherSelect({
             subjects: [],
           },
           balance: 0,
-        }
+          ownLessons: 0,
+          avoidPreferred: false,
+          consecutiveDayRisk: false,
+        } satisfies EligibleCover)
       : null;
   const selected =
     value === COVER_NOT_APPLICABLE_ID
