@@ -6,8 +6,13 @@ import { StaticModeBanner } from "@/components/static-mode-banner";
 import { useSchedule } from "@/components/schedule-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { OfficialArrangementImportCard } from "@/components/official-arrangement-import";
 
 const HINTS = [
+  {
+    title: "通知各部門調堂代堂安排",
+    body: "每個上課日一張工作表（例如 09-03）。上半部係原課堂老師、病假／公假／行政需要、代堂／調堂／合班、節數同代課老師；下半部當值／課外活動只作備註。匯入後寫入代堂同調堂紀錄，唔會改時間表。",
+  },
   {
     title: "1.0 班級總表",
     body: "每班一張工作表，橫列星期一至五、直列第一至第八節。儲存格可寫「科目 / 簡稱 / 地點」。",
@@ -31,7 +36,7 @@ export default function ImportPage() {
     <PageBody>
       <PageHeader
         title="匯入 Excel"
-        description="上載學務發展部 Excel。請用「教師時間表」每人一張工作表嘅檔（例如 2. 教師時間表 31-08-2026），堂次會按正式時間表覆蓋。"
+        description="上載學務發展部 Excel：教師／班級總表會覆蓋課表；《通知各部門調堂代堂安排》則匯入代堂同調堂紀錄。"
       />
       <ScheduleGate>
         <Inner />
@@ -91,7 +96,8 @@ function Inner() {
 
   return (
     <div className="space-y-6">
-      <StaticModeBanner feature="匯入 Excel" />
+      <StaticModeBanner feature="匯入課表 Excel" />
+      <OfficialArrangementImportCard data={data} />
       <Card>
         <CardHeader>
           <CardTitle>上載檔案</CardTitle>

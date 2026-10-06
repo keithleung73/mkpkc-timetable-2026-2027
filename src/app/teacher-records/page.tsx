@@ -53,7 +53,7 @@ export default function TeacherRecordsPage() {
     <PageBody>
       <PageHeader
         title="代堂及調課記錄"
-        description="查閱每位老師的代堂同調堂紀錄。可揀每日、每星期、每月，或自訂日期區間，再輸出 Excel／CSV 或列印。"
+        description="查閱每位老師的代堂同調堂紀錄（包括由《通知各部門調堂代堂安排》匯入嘅安排）。可揀每日、每星期、每月，或自訂日期區間，再輸出 Excel／CSV 或列印。"
       />
       <ScheduleGate>
         <TeacherRecordsInner />

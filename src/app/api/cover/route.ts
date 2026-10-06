@@ -5,6 +5,7 @@ import {
   mergeCoverSlotIntoPlan,
   type CoverAssignment,
   type CoverPlan,
+  type SavedCoverPlan,
   undoBalances,
   validateCoverPlan,
   weekdayFromIsoDate,
@@ -12,9 +13,10 @@ import {
 import { parseLeaveKind, type LeaveKind } from "@/lib/leave";
 import { coverDateError } from "@/lib/school-calendar";
 import { readCoverStore, writeCoverStore } from "@/lib/cover-store";
+import { mergeOfficialArrangementImport } from "@/lib/official-arrangements";
 import { readSchedule } from "@/lib/store";
-import { applyConfirmedSwaps } from "@/lib/swap-records";
-import { readSwapStore } from "@/lib/swap-store";
+import { applyConfirmedSwaps, type ConfirmedSwap } from "@/lib/swap-records";
+import { readSwapStore, writeSwapStore } from "@/lib/swap-store";
 
 export async function GET() {
   const store = readCoverStore();
@@ -36,6 +38,8 @@ type Body = {
   periodId?: string;
   leaveKind?: LeaveKind;
   leaveKinds?: Record<string, LeaveKind>;
+  plans?: SavedCoverPlan[];
+  swaps?: ConfirmedSwap[];
 };
 
 function scheduleForDate(date: string) {
@@ -207,6 +211,35 @@ export async function POST(req: Request) {
       balances: next.balances,
       plans: next.plans,
       swaps: readSwapStore().swaps,
+    });
+  }
+
+  if (action === "importOfficial") {
+    const incomingPlans = Array.isArray(body.plans) ? body.plans : [];
+    const incomingSwaps = Array.isArray(body.swaps) ? body.swaps : [];
+    if (incomingPlans.length === 0 && incomingSwaps.length === 0) {
+      return NextResponse.json({ error: "檔案沒有可匯入嘅調堂／代堂" }, { status: 400 });
+    }
+    const merged = mergeOfficialArrangementImport(store, readSwapStore().swaps, {
+      plans: incomingPlans,
+      swaps: incomingSwaps,
+      warnings: [],
+      summary: {
+        dates: [],
+        coverCount: 0,
+        combineCount: 0,
+        swapCount: incomingSwaps.length,
+        leftoverCount: 0,
+        unmatchedTeachers: [],
+      },
+    });
+    writeCoverStore({ balances: merged.balances, plans: merged.plans });
+    writeSwapStore({ swaps: merged.swaps });
+    return NextResponse.json({
+      ok: true,
+      balances: merged.balances,
+      plans: merged.plans,
+      swaps: merged.swaps,
     });
   }
 
