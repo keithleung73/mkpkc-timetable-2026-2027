@@ -14,10 +14,16 @@ import {
   mergeCoverSlotIntoPlan,
   MAX_COVER_LOAD_PER_DAY,
   MAX_OWN_LESSONS,
+  appendHeavyOwnLoadNote,
+  coverAssignmentHeavyOwnLessons,
+  heavyCoverTeachersOnPlan,
+  heavyOwnLoadNote,
+  isHeavyOwnLoad,
   ownTeachingLoadOnDay,
   ENGLISH_SPEAKING_COMBINE_REASON,
   PTH_DRAMA_COMBINE_REASON,
   reassignCover,
+  slotKey,
   slotsToCover,
   undoBalances,
   validateCoverPlan,
@@ -424,6 +430,41 @@ const F = teacher("F", "己");
   assert.ok(!auto.some((x) => x.teacher.id === "C"), "7 堂正規課不能自動代");
   const manual = manualCoverTeachers(data, "mon", new Set(["A"]), { C: -4 }, slot, []);
   assert.ok(manual.some((x) => x.teacher.id === "C"), "該節得閒仍可人手指定");
+  assert.equal(manual.find((x) => x.teacher.id === "C")?.ownLessons, 7);
+  assert.equal(heavyOwnLoadNote(7), "當日已有7堂正規課");
+  assert.equal(isHeavyOwnLoad(6), false);
+  assert.equal(isHeavyOwnLoad(7), true);
+  assert.equal(appendHeavyOwnLoadNote("病假", 7), "病假 · 當日已有7堂正規課");
+  assert.equal(appendHeavyOwnLoadNote("合班，不計節數", 7), "合班，不計節數");
+
+  const leftoverPlan = {
+    day: "mon" as const,
+    date: "2026-08-31",
+    absentees: ["A"],
+    slots: [slot],
+    assignments: [],
+    leftover: [slot],
+  };
+  const assigned = reassignCover(data, leftoverPlan, slotKey(slot), "C", { C: -4 });
+  const hit = assigned.assignments.find((a) => a.coverTeacherId === "C");
+  assert.ok(hit, "人手可指定當日 7 堂老師");
+  assert.match(hit!.reason, /當日已有7堂正規課/);
+  assert.equal(coverAssignmentHeavyOwnLessons(data, "mon", hit!), 7);
+  assert.deepEqual(
+    heavyCoverTeachersOnPlan(data, assigned).map((t) => t.teacherId),
+    ["C"],
+  );
+  const pdf = coverPdfRows(assigned, data);
+  assert.ok(
+    pdf.some((r) => r.coverTeacher === "丙" && r.remark === "當日已有7堂正規課"),
+    "PDF 備註要寫當日 7 堂",
+  );
+  const combineHit = {
+    ...hit!,
+    combine: true,
+    reason: PTH_DRAMA_COMBINE_REASON,
+  };
+  assert.equal(coverAssignmentHeavyOwnLessons(data, "mon", combineHit), null, "合班不標 7 堂");
 }
 
 {

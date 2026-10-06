@@ -1,5 +1,12 @@
 import { DAYS, SCHOOL_YEAR, SUBJECT_ABBR } from "./constants";
-import { isCoverWaived, type CoverAssignment, type CoverPlan, type CoverSlot } from "./cover";
+import {
+  heavyOwnLoadNote,
+  isCoverWaived,
+  ownTeachingLoadOnDay,
+  type CoverAssignment,
+  type CoverPlan,
+  type CoverSlot,
+} from "./cover";
 import { classNames, roomName, teacherById } from "./queries";
 import type { DayId, ScheduleData } from "./types";
 
@@ -190,7 +197,15 @@ export function coverPdfRows(plan: CoverPlan, data: ScheduleData): CoverPdfRow[]
       classSubjectRoom: `${classLabel(data, first.classIds)} ${subjectShort(first.subject)} ${room}`,
       coverTeacher: first.leftover ? "" : first.waived ? "不適用" : first.coverTeacherName,
       arrangement: first.leftover ? "" : first.waived ? "不用代堂" : first.combine ? "合班（不計節數）" : "即日代堂",
-      remark: first.leftover ? "未能編配" : first.waived ? "該節不用代堂" : first.combine ? "不計節數" : "",
+      remark: first.leftover
+        ? "未能編配"
+        : first.waived
+          ? "該節不用代堂"
+          : first.combine
+            ? "不計節數"
+            : first.coverTeacherId
+              ? (heavyOwnLoadNote(ownTeachingLoadOnDay(data, first.coverTeacherId, plan.day)) ?? "")
+              : "",
     };
   });
 }

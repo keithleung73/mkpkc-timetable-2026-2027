@@ -13,6 +13,7 @@ import {
   resolveOfficialArrangements,
   resolveOfficialTeacher,
 } from "../src/lib/official-arrangements";
+import { heavyOwnLoadNote, ownTeachingLoadOnDay } from "../src/lib/cover";
 import type { ScheduleData } from "../src/lib/types";
 
 const data = JSON.parse(readFileSync("data/schedule.json", "utf8")) as ScheduleData;
@@ -100,6 +101,25 @@ const duty15 = resolved.plans.find((p) => p.date === "2026-09-15")?.dutyNotes ??
 assert.ok(duty15.some((n) => n.kind === "duty" && n.teacherName.includes("陳曼湖")));
 assert.ok(han?.assignments.some((a) => a.periodId === "hr" && a.coverTeacherName.includes("陳麗嫻")));
 assert.ok(han?.assignments.some((a) => a.periodId === "p1" && a.coverTeacherId === "湖"));
+
+const heavyOfficial = resolved.plans.flatMap((p) =>
+  p.assignments
+    .filter((a) => !a.combine && !a.waived)
+    .map((a) => ({
+      plan: p,
+      assignment: a,
+      own: ownTeachingLoadOnDay(data, a.coverTeacherId, p.day),
+    }))
+    .filter((x) => x.own > 6),
+);
+for (const hit of heavyOfficial) {
+  const note = heavyOwnLoadNote(hit.own);
+  assert.ok(note);
+  assert.ok(
+    hit.assignment.reason.includes(note!),
+    `${hit.plan.date} ${hit.assignment.coverTeacherName} 應備註 ${note}`,
+  );
+}
 
 const kaurCombine = resolved.plans
   .find((p) => p.date === "2026-09-18")
