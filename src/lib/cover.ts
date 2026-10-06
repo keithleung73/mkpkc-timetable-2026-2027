@@ -89,6 +89,14 @@ export function toWaivedAssignment(slot: CoverSlot): CoverAssignment {
   };
 }
 
+export type CoverDutyNote = {
+  kind: "duty" | "eca";
+  teacherName: string;
+  teacherId?: string;
+  detail: string;
+  location?: string;
+};
+
 export type CoverPlan = {
   day: DayId;
   date: string;
@@ -98,6 +106,9 @@ export type CoverPlan = {
   slots: CoverSlot[];
   assignments: CoverAssignment[];
   leftover: CoverSlot[];
+  /** 當值／課外活動（學務部通知表下半部），只作備註 */
+  dutyNotes?: CoverDutyNote[];
+  source?: string;
 };
 
 export type CoverBalances = Record<string, number>;

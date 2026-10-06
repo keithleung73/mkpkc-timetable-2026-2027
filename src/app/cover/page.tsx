@@ -69,6 +69,7 @@ import { coverRequest } from "@/lib/web-ops";
 import { printCoverPlan } from "@/lib/cover-print";
 import { isStaticExport } from "@/lib/runtime";
 import { cn } from "@/lib/utils";
+import { OfficialArrangementImportCard } from "@/components/official-arrangement-import";
 
 type CoverStorePayload = {
   balances: CoverBalances;
@@ -81,7 +82,7 @@ export default function CoverPage() {
     <PageBody>
       <PageHeader
         title="代堂編配"
-        description="勾選當日請假同事，並標明病假／事假／公假。公假不計算 ±。系統按已確認調堂後嘅課表編配代堂。學校假期、統測、考試、深度學習周同其他無堂日沒有正規課堂，不能調堂亦不能代堂。"
+        description="勾選當日請假同事，並標明病假／事假／公假。公假不計算 ±。可匯入學務部《通知各部門調堂代堂安排》Excel。系統按已確認調堂後嘅課表編配代堂。學校假期、統測、考試、深度學習周同其他無堂日沒有正規課堂，不能調堂亦不能代堂。"
       />
       <ScheduleGate>
         <Inner />
@@ -330,6 +331,16 @@ function Inner() {
         <p className="text-sm text-destructive">{loadError}</p>
       ) : null}
 
+      <OfficialArrangementImportCard
+        data={data}
+        onImported={(payload) => {
+          setBalances(payload.balances ?? {});
+          setHistory(payload.plans ?? []);
+          setSwaps(payload.swaps ?? []);
+          setPlan(null);
+        }}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle>編配規則</CardTitle>
@@ -453,6 +464,17 @@ function Inner() {
             <FileDown />
             匯出 PDF
           </Button>
+          {savedToday.dutyNotes?.length ? (
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+              {savedToday.dutyNotes.map((n, i) => (
+                <li key={`${n.kind}-${n.teacherName}-${i}`}>
+                  {n.kind === "duty" ? "當值" : "課外活動"}：{n.teacherName}
+                  {n.detail ? ` · ${n.detail}` : ""}
+                  {n.location ? ` · ${n.location}` : ""}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
 
@@ -896,6 +918,7 @@ function AssignedCoverRow({
       <td className="px-3 py-2">
         <CoverTeacherSelect
           value={isCoverWaived(a) ? COVER_NOT_APPLICABLE_ID : a.coverTeacherId}
+          currentLabel={a.coverTeacherName}
           options={options}
           extras={extras}
           onChange={(id) => onChange(reassignCover(data, plan, key, id, balances, history))}
@@ -1130,21 +1153,40 @@ function coverOptionLabel(o: EligibleCover) {
 
 function CoverTeacherSelect({
   value,
+  currentLabel,
   options,
   extras,
   placeholder,
   onChange,
 }: {
   value?: string;
+  currentLabel?: string;
   options: EligibleCover[];
   extras: EligibleCover[];
   placeholder?: string;
   onChange: (id: string) => void;
 }) {
+  const imported =
+    value &&
+    value !== COVER_NOT_APPLICABLE_ID &&
+    ![...options, ...extras].some((o) => o.teacher.id === value)
+      ? ({
+          teacher: {
+            id: value,
+            name: currentLabel || (value.startsWith("ext:") ? value.slice(4) : value),
+            code: currentLabel || (value.startsWith("ext:") ? value.slice(4) : value),
+            subjects: [],
+          },
+          balance: 0,
+          ownLessons: 0,
+          avoidPreferred: false,
+          consecutiveDayRisk: false,
+        } satisfies EligibleCover)
+      : null;
   const selected =
     value === COVER_NOT_APPLICABLE_ID
       ? `${COVER_NOT_APPLICABLE_LABEL}（該節不用代堂）`
-      : [...options, ...extras].find((o) => o.teacher.id === value);
+      : [...options, ...extras, ...(imported ? [imported] : [])].find((o) => o.teacher.id === value);
   const selectedText = typeof selected === "string" ? selected : selected ? coverOptionLabel(selected) : undefined;
   return (
     <Select
@@ -1180,6 +1222,12 @@ function CoverTeacherSelect({
                 {coverOptionLabel(o)} · 人手
               </SelectItem>
             ))}
+          </SelectGroup>
+        ) : null}
+        {imported ? (
+          <SelectGroup>
+            <SelectLabel>通知表姓名（時間表無此人）</SelectLabel>
+            <SelectItem value={imported.teacher.id}>{coverOptionLabel(imported)}</SelectItem>
           </SelectGroup>
         ) : null}
       </SelectContent>

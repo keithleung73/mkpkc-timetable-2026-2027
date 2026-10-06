@@ -7,6 +7,7 @@ import {
   weekdayFromIsoDate,
   type CoverAssignment,
   type CoverPlan,
+  type SavedCoverPlan,
 } from "./cover";
 import { parseLeaveKind, type LeaveKind } from "./leave";
 import {
@@ -26,6 +27,7 @@ import {
   swapConflicts,
   type ConfirmedSwap,
 } from "./swap-records";
+import { mergeOfficialArrangementImport } from "./official-arrangements";
 import type { SwapMode, SwapPeriodPair } from "./swap-rules";
 import type { ScheduleData } from "./types";
 
@@ -65,6 +67,8 @@ export type CoverBody = {
   periodId?: string;
   leaveKind?: LeaveKind;
   leaveKinds?: Record<string, LeaveKind>;
+  plans?: SavedCoverPlan[];
+  swaps?: ConfirmedSwap[];
 };
 
 type Err = { error: string };
@@ -310,6 +314,35 @@ export function localCoverPost(data: ScheduleData, body: CoverBody) {
     const next = { balances, plans: [saved, ...remaining].slice(0, 80) };
     saveCoverStore(next);
     return { ok: true, saved, balances: next.balances, plans: next.plans, swaps: loadSwapStore().swaps };
+  }
+
+  if (action === "importOfficial") {
+    const incomingPlans = Array.isArray(body.plans) ? body.plans : [];
+    const incomingSwaps = Array.isArray(body.swaps) ? body.swaps : [];
+    if (incomingPlans.length === 0 && incomingSwaps.length === 0) {
+      return fail("檔案沒有可匯入嘅調堂／代堂");
+    }
+    const merged = mergeOfficialArrangementImport(store, loadSwapStore().swaps, {
+      plans: incomingPlans,
+      swaps: incomingSwaps,
+      warnings: [],
+      summary: {
+        dates: [],
+        coverCount: 0,
+        combineCount: 0,
+        swapCount: incomingSwaps.length,
+        leftoverCount: 0,
+        unmatchedTeachers: [],
+      },
+    });
+    saveCoverStore({ balances: merged.balances, plans: merged.plans });
+    saveSwapStore({ swaps: merged.swaps });
+    return {
+      ok: true,
+      balances: merged.balances,
+      plans: merged.plans,
+      swaps: merged.swaps,
+    };
   }
 
   return fail("未知操作");
