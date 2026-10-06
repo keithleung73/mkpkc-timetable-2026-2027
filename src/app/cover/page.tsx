@@ -918,6 +918,7 @@ function AssignedCoverRow({
       <td className="px-3 py-2">
         <CoverTeacherSelect
           value={isCoverWaived(a) ? COVER_NOT_APPLICABLE_ID : a.coverTeacherId}
+          currentLabel={a.coverTeacherName}
           options={options}
           extras={extras}
           onChange={(id) => onChange(reassignCover(data, plan, key, id, balances, history))}
@@ -1152,21 +1153,37 @@ function coverOptionLabel(o: EligibleCover) {
 
 function CoverTeacherSelect({
   value,
+  currentLabel,
   options,
   extras,
   placeholder,
   onChange,
 }: {
   value?: string;
+  currentLabel?: string;
   options: EligibleCover[];
   extras: EligibleCover[];
   placeholder?: string;
   onChange: (id: string) => void;
 }) {
+  const imported =
+    value &&
+    value !== COVER_NOT_APPLICABLE_ID &&
+    ![...options, ...extras].some((o) => o.teacher.id === value)
+      ? {
+          teacher: {
+            id: value,
+            name: currentLabel || (value.startsWith("ext:") ? value.slice(4) : value),
+            code: currentLabel || (value.startsWith("ext:") ? value.slice(4) : value),
+            subjects: [],
+          },
+          balance: 0,
+        }
+      : null;
   const selected =
     value === COVER_NOT_APPLICABLE_ID
       ? `${COVER_NOT_APPLICABLE_LABEL}（該節不用代堂）`
-      : [...options, ...extras].find((o) => o.teacher.id === value);
+      : [...options, ...extras, ...(imported ? [imported] : [])].find((o) => o.teacher.id === value);
   const selectedText = typeof selected === "string" ? selected : selected ? coverOptionLabel(selected) : undefined;
   return (
     <Select
@@ -1202,6 +1219,12 @@ function CoverTeacherSelect({
                 {coverOptionLabel(o)} · 人手
               </SelectItem>
             ))}
+          </SelectGroup>
+        ) : null}
+        {imported ? (
+          <SelectGroup>
+            <SelectLabel>通知表姓名（時間表無此人）</SelectLabel>
+            <SelectItem value={imported.teacher.id}>{coverOptionLabel(imported)}</SelectItem>
           </SelectGroup>
         ) : null}
       </SelectContent>
