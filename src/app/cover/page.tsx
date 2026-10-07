@@ -25,6 +25,7 @@ import {
   buildCoverDatesByTeacher,
   coverAbsenteeGroups,
   COVER_AVOID_TEACHER_NAMES,
+  THURSDAY_LCL_NET_TEACHER_LABELS,
   COVER_NOT_APPLICABLE_ID,
   COVER_NOT_APPLICABLE_LABEL,
   coverAssignmentHeavyOwnLessons,
@@ -361,6 +362,10 @@ function Inner() {
           <p>同一人唔可以連續兩節代堂（例如代完第三節就不能代第四節）；同自己原本課堂相鄰則可以。</p>
           <p>普通話／戲劇、英文對拆堂：若另一位老師在，由該老師合班，列入安排但不計代堂節數及 ±。雙方都請假則照常找人代。</p>
           <p>方案可按請假老師分開睇（每位獨立一組），或按節次一覽全日。已確認調堂會改當日佔用：被調去上課嘅同事該節不能代堂。已入帳／人手指定嘅代堂同樣佔用該節，之後電產生調堂或代堂唔會再派同一人同一節。CLP 可以調堂（調去 CLP／空堂）；CLP、聯咨會、首席會同部會本身唔擋代堂。</p>
+          <p>
+            星期四 LCL／重摘課不安排 NET 老師代堂：{THURSDAY_LCL_NET_TEACHER_LABELS.join("、")}
+            （自動同人手指定名單都唔會出現）。
+          </p>
           <p>
             盡量唔編：{COVER_AVOID_TEACHER_NAMES.join("、")}
             （無人可代時仍可編；亦可人手改派）。

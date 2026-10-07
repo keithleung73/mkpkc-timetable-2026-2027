@@ -6,6 +6,7 @@ import {
   assignmentKey,
   coverAbsenteeGroups,
   COVER_NOT_APPLICABLE_ID,
+  coverAssignBlockReason,
   eligibleCoverTeachers,
   generateCoverPlan,
   isCoverWaived,
@@ -19,7 +20,10 @@ import {
   heavyCoverTeachersOnPlan,
   heavyOwnLoadNote,
   isHeavyOwnLoad,
+  isLclSubject,
+  isThursdayLclNetTeacher,
   ownTeachingLoadOnDay,
+  THURSDAY_LCL_NET_COVER_REASON,
   ENGLISH_SPEAKING_COMBINE_REASON,
   PTH_DRAMA_COMBINE_REASON,
   reassignCover,
@@ -976,6 +980,87 @@ const F = teacher("F", "己");
     cGroup!.assignments.every((x) => x.absenteeId === "C") &&
       cGroup!.leftover.every((x) => x.teacherId === "C"),
   );
+}
+
+{
+  const kaur: Teacher = { id: "KAUR", name: "溫敏兒", code: "KAUR", subjects: ["英文"] };
+  const dari: Teacher = { id: "DARI", name: "DARI", code: "DARI", subjects: ["英文"] };
+  const yao: Teacher = {
+    id: "姚",
+    name: "姚嘉宏",
+    code: "姚",
+    subjects: ["數學"],
+    englishName: "IU KA WANG",
+  };
+  const data = schedule(
+    [A, B, kaur, dari, yao],
+    [
+      lesson("thu-lcl", "thu", "p9", "A", { subject: "重摘課", classIds: ["5D"] }),
+      lesson("thu-eng", "thu", "p3", "A", { subject: "英文", classIds: ["1C"] }),
+      lesson("wed-lcl", "wed", "p9", "A", { subject: "重摘課", classIds: ["5D"] }),
+    ],
+  );
+  const thuLcl = {
+    periodId: "p9",
+    classIds: ["5D"],
+    subject: "重摘課",
+    roomId: "201",
+    teacherId: "A",
+    teacherName: "甲",
+  };
+  const thuEng = { ...thuLcl, periodId: "p3", subject: "英文", classIds: ["1C"] };
+  const wedLcl = { ...thuLcl, subject: "重摘課" };
+  assert.equal(isLclSubject("重摘課"), true);
+  assert.equal(isLclSubject("LCL"), true);
+  assert.equal(isLclSubject("CLP 中一英文 KAUR"), false);
+  assert.equal(isThursdayLclNetTeacher(kaur), true);
+  assert.equal(isThursdayLclNetTeacher(yao), false, "英文名含 WANG 唔算 NET 名單");
+
+  const thuLclAuto = eligibleCoverTeachers(data, "thu", new Set(["A"]), { KAUR: -9, DARI: -8, B: 0, 姚: 0 }, thuLcl, []);
+  assert.ok(!thuLclAuto.some((x) => x.teacher.id === "KAUR" || x.teacher.id === "DARI"));
+  assert.ok(thuLclAuto.some((x) => x.teacher.id === "B"), "本地老師仍可代星期四 LCL");
+  const thuLclManual = manualCoverTeachers(data, "thu", new Set(["A"]), { KAUR: -9 }, thuLcl, []);
+  assert.ok(!thuLclManual.some((x) => x.teacher.id === "KAUR"), "人手指定名單都唔好有 NET");
+
+  const thuEngAuto = eligibleCoverTeachers(data, "thu", new Set(["A"]), { KAUR: -9, B: 0 }, thuEng, []);
+  assert.ok(thuEngAuto.some((x) => x.teacher.id === "KAUR"), "星期四英文仍可由 NET 代");
+
+  const wedAuto = eligibleCoverTeachers(data, "wed", new Set(["A"]), { KAUR: -9, B: 0 }, wedLcl, []);
+  assert.ok(wedAuto.some((x) => x.teacher.id === "KAUR"), "其他日重摘課仍可由 NET 代");
+
+  assert.equal(
+    coverAssignBlockReason(data, "thu", new Set(["A"]), thuLcl, [], "KAUR"),
+    THURSDAY_LCL_NET_COVER_REASON,
+  );
+  const merged = mergeCoverSlotIntoPlan(data, null, "2026-09-17", "thu", "A", "p9", "KAUR", "sick");
+  assert.ok("error" in merged);
+  if ("error" in merged) assert.match(merged.error, /星期四 LCL 不安排 NET/);
+
+  const plan = generateCoverPlan(data, "thu", "2026-09-17", ["A"], { KAUR: -9, DARI: -8, B: -1 });
+  const p9 = plan.assignments.find((a) => a.periodId === "p9");
+  assert.ok(p9);
+  assert.notEqual(p9?.coverTeacherId, "KAUR");
+  assert.notEqual(p9?.coverTeacherId, "DARI");
+}
+
+{
+  const live = JSON.parse(readFileSync("data/schedule.json", "utf8")) as ScheduleData;
+  const plan = generateCoverPlan(live, "thu", "2026-09-17", ["霞"], {});
+  const nets = new Set(["KAUR", "DARI", "SCOT", "WAY", "ROIS", "JOH", "WANG", "MIRZ"]);
+  const lcl = [...plan.assignments, ...plan.leftover].filter(
+    (x) => x.periodId === "p9" || ("subject" in x && isLclSubject(x.subject)),
+  );
+  assert.ok(lcl.length > 0, "星期四應有 LCL／重摘課要代");
+  assert.ok(
+    plan.assignments
+      .filter((a) => isLclSubject(a.subject))
+      .every((a) => !nets.has(a.coverTeacherId)),
+    "正式課表星期四 LCL 唔好派 NET",
+  );
+  const slot = plan.slots.find((s) => s.periodId === "p9" && isLclSubject(s.subject));
+  assert.ok(slot);
+  const auto = eligibleCoverTeachers(live, "thu", new Set(["霞"]), {}, slot!, []);
+  assert.ok(auto.every((x) => !nets.has(x.teacher.id)));
 }
 
 void (async () => {
