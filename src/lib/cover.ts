@@ -75,6 +75,67 @@ export const COVER_AVOID_TEACHER_NAMES = [
   "郭鳳萍",
 ] as const;
 
+/** 星期四 LCL／重摘課唔好派呢批 NET 老師代堂 */
+export const THURSDAY_LCL_NET_TEACHER_IDS = [
+  "KAUR",
+  "DARI",
+  "SCOT",
+  "WAY",
+  "ROIS",
+  "JOH",
+  "WANG",
+  "MIRZ",
+] as const;
+
+export const THURSDAY_LCL_NET_TEACHER_LABELS = [
+  "KAUR",
+  "DARI",
+  "SCOTT",
+  "WAYNE",
+  "ROISIN",
+  "JOHAN",
+  "WANG",
+  "MIRZA",
+] as const;
+
+const THURSDAY_LCL_NET_ALIASES = new Set(
+  [
+    ...THURSDAY_LCL_NET_TEACHER_IDS,
+    ...THURSDAY_LCL_NET_TEACHER_LABELS,
+    "RAMAN",
+    "JOHNAN",
+  ].map((s) => s.toUpperCase()),
+);
+
+export const THURSDAY_LCL_NET_COVER_REASON = "星期四 LCL 不安排 NET 老師代堂";
+
+export function isLclSubject(subject: string): boolean {
+  const s = subject.replace(/\s+/g, "");
+  if (!s || /CLP/i.test(s)) return false;
+  return /LCL/i.test(s) || s === "重摘課";
+}
+
+export function isThursdayLclSlot(day: DayId, slot: { subject: string }): boolean {
+  return day === "thu" && isLclSubject(slot.subject);
+}
+
+export function isThursdayLclNetTeacher(teacher: Pick<Teacher, "id" | "code" | "name">): boolean {
+  const tokens = [teacher.id, teacher.code, teacher.name.replace(/\s+/g, "")].map((s) => s.toUpperCase());
+  return tokens.some((t) => THURSDAY_LCL_NET_ALIASES.has(t));
+}
+
+export function isThursdayLclNetCover(
+  data: ScheduleData,
+  day: DayId,
+  slot: { subject: string },
+  teacherId: string,
+): boolean {
+  if (!isThursdayLclSlot(day, slot)) return false;
+  if (THURSDAY_LCL_NET_ALIASES.has(teacherId.toUpperCase())) return true;
+  const teacher = data.teachers.find((t) => t.id === teacherId);
+  return teacher ? isThursdayLclNetTeacher(teacher) : false;
+}
+
 /** 同一星期內，盡量唔好連續代堂多於呢個日數 */
 export const MAX_CONSECUTIVE_COVER_DAYS = 2;
 
@@ -656,6 +717,21 @@ function takenCoverIdsThisPeriod(alreadyAssigned: CoverAssignment[], periodId: s
   );
 }
 
+/** 編配政策：硬限制以外，星期四 LCL 唔派 NET。已入帳／通知表安排唔用呢條，以免覆蓋官方編配。 */
+export function coverAssignBlockReason(
+  data: ScheduleData,
+  day: DayId,
+  absentees: Set<string>,
+  slot: CoverSlot,
+  alreadyAssigned: CoverAssignment[],
+  teacherId: string,
+): string | null {
+  const hard = coverHardBlockReason(data, day, absentees, slot, alreadyAssigned, teacherId);
+  if (hard) return hard;
+  if (isThursdayLclNetCover(data, day, slot, teacherId)) return THURSDAY_LCL_NET_COVER_REASON;
+  return null;
+}
+
 /** 硬限制：請假、該節已有課／已代、一日代堂超過兩堂。人手指定都要守。合班搭檔可例外。 */
 export function coverHardBlockReason(
   data: ScheduleData,
@@ -714,7 +790,7 @@ export function eligibleCoverTeachers(
   const out: EligibleCover[] = [];
   for (const teacher of data.teachers) {
     const combine = isUnpaidCombinePartner(data, day, slot, absentees, teacher.id);
-    if (coverHardBlockReason(data, day, absentees, slot, alreadyAssigned, teacher.id)) continue;
+    if (coverAssignBlockReason(data, day, absentees, slot, alreadyAssigned, teacher.id)) continue;
     const own = ownTeachingLoadOnDay(data, teacher.id, day);
     if (!combine && own > MAX_OWN_LESSONS) continue;
     if (!combine && consecutiveCoverViolation(day, slot.periodId, alreadyAssigned, teacher.id)) {
@@ -770,7 +846,7 @@ export function manualCoverTeachers(
   const out: EligibleCover[] = [];
   for (const teacher of data.teachers) {
     if (autoIds.has(teacher.id)) continue;
-    if (coverHardBlockReason(data, day, absentees, slot, alreadyAssigned, teacher.id)) continue;
+    if (coverAssignBlockReason(data, day, absentees, slot, alreadyAssigned, teacher.id)) continue;
     out.push(toEligibleCover(data, day, balances, teacher, ctx, true));
   }
   out.sort((a, b) => {
@@ -1021,7 +1097,7 @@ export function mergeCoverSlotIntoPlan(
     teacherName: absentee.name,
   };
   const absentSet = new Set(absentees);
-  const blocked = coverHardBlockReason(
+  const blocked = coverAssignBlockReason(
     data,
     day,
     absentSet,
