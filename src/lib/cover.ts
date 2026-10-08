@@ -2,6 +2,7 @@ import { COVER_PERIOD_IDS, periodLabel as periodLabelFromConstants } from "./con
 import { coverWeight, formatCoverPoints, HOMEROOM_PERIOD_ID, isHomeroomLesson } from "./homeroom";
 import { leaveCountsBalance, type LeaveKind } from "./leave";
 import { isTeachingLesson, lessonOccupiesTeacher } from "./lesson-kind";
+import { isResignedTeacher, RESIGNED_COVER_REASON } from "./schedule-corrections";
 import {
   classesOverlap,
   findEnglishSpeakingPartnerLessons,
@@ -735,6 +736,7 @@ export function coverAssignBlockReason(
 ): string | null {
   const hard = coverHardBlockReason(data, day, absentees, slot, alreadyAssigned, teacherId);
   if (hard) return hard;
+  if (isResignedTeacher(teacherId)) return RESIGNED_COVER_REASON;
   if (isThursdayLclNetCover(data, day, slot, teacherId)) return THURSDAY_LCL_NET_COVER_REASON;
   return null;
 }

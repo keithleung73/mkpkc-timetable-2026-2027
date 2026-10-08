@@ -11,6 +11,7 @@ import {
   confirmedSwapFromSuggestion,
   reviseConfirmedSwap,
 } from "../src/lib/swap-records";
+import { prepareSchedule } from "../src/lib/schedule-corrections";
 import type { Lesson, ScheduleData, Teacher } from "../src/lib/types";
 
 function teacher(id: string, name: string): Teacher {
@@ -410,8 +411,10 @@ const 乙 = teacher("乙", "乙老師");
 }
 
 {
-  const live = JSON.parse(readFileSync("data/schedule.json", "utf8")) as ScheduleData;
-  const plan = planTeacherLeaveSwaps(live, "彤", ["2026-09-08"], "2026-09-08");
+  const live = prepareSchedule(
+    JSON.parse(readFileSync("data/schedule.json", "utf8")) as ScheduleData,
+  );
+  const plan = planTeacherLeaveSwaps(live, "余", ["2026-09-08"], "2026-09-08");
   const p7 = plan.results.find((r) => r.unit.periodId === "p7" && r.unit.kind === "normal");
   assert.equal(p7?.status, "cover");
   assert.ok(
@@ -513,7 +516,9 @@ const 乙 = teacher("乙", "乙老師");
 }
 
 {
-  const live = JSON.parse(readFileSync("data/schedule.json", "utf8")) as ScheduleData;
+  const live = prepareSchedule(
+    JSON.parse(readFileSync("data/schedule.json", "utf8")) as ScheduleData,
+  );
   const plan = planTeacherLeaveSwaps(live, "振", ["2026-09-03"], "2026-09-03");
   const twoE = plan.results.find((r) => r.unit.periodId === "p3" && r.unit.kind === "normal");
   assert.ok(
@@ -528,9 +533,9 @@ const 乙 = teacher("乙", "乙老師");
   const pair = plan.results.find((r) => r.unit.kind === "subject_pair" && r.unit.periodId === "p7");
   assert.ok(pair, "2D 數學第七、八節應成同一科兩堂");
 
-  const tong = planTeacherLeaveSwaps(live, "彤", ["2026-09-08"], "2026-09-08");
-  const pthUnits = tong.results.filter((r) => r.unit.subjects.some((s) => /普話|普通話/.test(s)));
-  assert.ok(pthUnits.length > 0, "正式課表林紀彤星期二應有普通話");
+  const yu = planTeacherLeaveSwaps(live, "余", ["2026-09-08"], "2026-09-08");
+  const pthUnits = yu.results.filter((r) => r.unit.subjects.some((s) => /普話|普通話/.test(s)));
+  assert.ok(pthUnits.length > 0, "正式課表余沛峰星期二應有普通話");
   assert.ok(
     pthUnits.every(
       (r) =>
