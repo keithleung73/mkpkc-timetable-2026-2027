@@ -1,6 +1,6 @@
 import { DAYS, SCHOOL_YEAR, SUBJECT_ABBR } from "./constants";
 import {
-  heavyOwnLoadNote,
+  coverLoadNote,
   isCoverWaived,
   ownTeachingLoadOnDay,
   type CoverAssignment,
@@ -204,7 +204,7 @@ export function coverPdfRows(plan: CoverPlan, data: ScheduleData): CoverPdfRow[]
           : first.combine
             ? "不計節數"
             : first.coverTeacherId
-              ? (heavyOwnLoadNote(ownTeachingLoadOnDay(data, first.coverTeacherId, plan.day)) ?? "")
+              ? (coverLoadNote(ownTeachingLoadOnDay(data, first.coverTeacherId, plan.day)) ?? "")
               : "",
     };
   });

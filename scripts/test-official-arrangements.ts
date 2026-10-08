@@ -13,7 +13,7 @@ import {
   resolveOfficialArrangements,
   resolveOfficialTeacher,
 } from "../src/lib/official-arrangements";
-import { heavyOwnLoadNote, ownTeachingLoadOnDay } from "../src/lib/cover";
+import { coverLoadNote, ownTeachingLoadOnDay } from "../src/lib/cover";
 import type { ScheduleData } from "../src/lib/types";
 
 const data = JSON.parse(readFileSync("data/schedule.json", "utf8")) as ScheduleData;
@@ -110,10 +110,10 @@ const heavyOfficial = resolved.plans.flatMap((p) =>
       assignment: a,
       own: ownTeachingLoadOnDay(data, a.coverTeacherId, p.day),
     }))
-    .filter((x) => x.own > 6),
+    .filter((x) => x.own >= 6),
 );
 for (const hit of heavyOfficial) {
-  const note = heavyOwnLoadNote(hit.own);
+  const note = coverLoadNote(hit.own);
   assert.ok(note);
   assert.ok(
     hit.assignment.reason.includes(note!),
