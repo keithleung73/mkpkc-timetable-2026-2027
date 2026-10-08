@@ -32,8 +32,15 @@ export function heavyOwnLoadNote(ownLessons: number): string | null {
   return `當日已有${ownLessons}堂正規課`;
 }
 
+/** 當日已有 6 堂再代會變 7 堂，或本身已有 7 堂或以上 */
+export function coverLoadNote(ownLessons: number): string | null {
+  if (isHeavyOwnLoad(ownLessons)) return heavyOwnLoadNote(ownLessons);
+  if (ownLessons === MAX_OWN_LESSONS) return "當日已有6堂正規課，代後共7堂";
+  return null;
+}
+
 export function appendHeavyOwnLoadNote(reason: string, ownLessons: number): string {
-  const note = heavyOwnLoadNote(ownLessons);
+  const note = coverLoadNote(ownLessons);
   if (!note || reason.includes(note) || reason.includes("合班")) return reason;
   return `${reason} · ${note}`;
 }
@@ -47,7 +54,7 @@ export function coverAssignmentHeavyOwnLessons(
   const id = assignment.coverTeacherId;
   if (!id || id.startsWith("ext:")) return null;
   const own = ownTeachingLoadOnDay(data, id, day);
-  return isHeavyOwnLoad(own) ? own : null;
+  return coverLoadNote(own) ? own : null;
 }
 
 export function heavyCoverTeachersOnPlan(data: ScheduleData, plan: CoverPlan) {
@@ -862,7 +869,7 @@ function pickReason(pick: EligibleCover) {
   const notes: string[] = [];
   if (pick.consecutiveDayRisk) notes.push("本週已連續代堂");
   if (pick.avoidPreferred) notes.push("盡量少編名單");
-  const heavy = heavyOwnLoadNote(pick.ownLessons);
+  const heavy = coverLoadNote(pick.ownLessons);
   if (heavy) notes.push(heavy);
   const suffix = notes.length ? `；${notes.join("、")}` : "";
   return `${sign}（${pick.balance}），當日原有 ${pick.ownLessons} 堂${suffix}`;

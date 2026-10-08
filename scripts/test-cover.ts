@@ -18,6 +18,7 @@ import {
   appendHeavyOwnLoadNote,
   coverAssignmentHeavyOwnLessons,
   heavyCoverTeachersOnPlan,
+  coverLoadNote,
   heavyOwnLoadNote,
   isHeavyOwnLoad,
   isLclSubject,
@@ -412,6 +413,23 @@ const F = teacher("F", "己");
     [],
   );
   assert.ok(list.some((x) => x.teacher.id === "B"), "6 堂正規課加班主任節仍可代人");
+  assert.equal(list.find((x) => x.teacher.id === "B")?.ownLessons, 6);
+  assert.equal(coverLoadNote(6), "當日已有6堂正規課，代後共7堂");
+  assert.equal(appendHeavyOwnLoadNote("病假", 6), "病假 · 當日已有6堂正規課，代後共7堂");
+  const sixPlan = generateCoverPlan(data, "mon", "2026-08-31", ["A"], { B: -2 });
+  const sixHit = sixPlan.assignments.find((a) => a.coverTeacherId === "B");
+  assert.ok(sixHit, "6 堂老師仍可自動代");
+  assert.match(sixHit!.reason, /當日已有6堂正規課，代後共7堂/);
+  assert.equal(coverAssignmentHeavyOwnLessons(data, "mon", sixHit!), 6);
+  assert.deepEqual(
+    heavyCoverTeachersOnPlan(data, sixPlan).map((t) => t.teacherId),
+    ["B"],
+  );
+  const sixPdf = coverPdfRows(sixPlan, data);
+  assert.ok(
+    sixPdf.some((r) => r.coverTeacher === "乙" && r.remark === "當日已有6堂正規課，代後共7堂"),
+    "PDF 備註要寫 6 堂代後 7 堂",
+  );
 }
 
 {

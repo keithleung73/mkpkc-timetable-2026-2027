@@ -2,7 +2,7 @@ import { dayLabel, periodLabel } from "./constants";
 import { addDaysIso, mondayOfWeekIso, weekdayFromIsoDate } from "./cover";
 import {
   coverAssignmentHeavyOwnLessons,
-  heavyOwnLoadNote,
+  coverLoadNote,
   isCoverWaived,
   type SavedCoverPlan,
 } from "./cover";
@@ -264,7 +264,7 @@ function pushCoverRows(
     if (!teacherId || a.coverTeacherId === teacherId) {
       const heavy =
         data && !a.combine
-          ? heavyOwnLoadNote(coverAssignmentHeavyOwnLessons(data, plan.day, a) ?? 0)
+          ? coverLoadNote(coverAssignmentHeavyOwnLessons(data, plan.day, a) ?? 0)
           : null;
       out.push({
         id: `${plan.id}|cover|${a.periodId}|${a.coverTeacherId}`,

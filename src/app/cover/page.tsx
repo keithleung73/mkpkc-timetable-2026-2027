@@ -29,11 +29,10 @@ import {
   COVER_NOT_APPLICABLE_ID,
   COVER_NOT_APPLICABLE_LABEL,
   coverAssignmentHeavyOwnLessons,
+  coverLoadNote,
   eligibleCoverTeachers,
   heavyCoverTeachersOnPlan,
-  heavyOwnLoadNote,
   isCoverWaived,
-  isHeavyOwnLoad,
   generateCoverPlan,
   hkTodayIso,
   MAX_CONSECUTIVE_COVER_DAYS,
@@ -356,7 +355,7 @@ function Inner() {
           <p>08:00 班主任節（一至四 08:00–08:25，五 08:00–08:15）都要找人代；只當 0.5 節代堂。若該班仍有另一位班主任在，則不用另找人。班主任節不計入老師當日正規堂數。</p>
           <p>公假：仍會編代堂，但請假人同代堂人都不加減分數。</p>
           <p>病假／事假較多（結餘較負）者優先代堂，其後先睇當日原有堂數。</p>
-          <p>當日正規課堂多於 {MAX_OWN_LESSONS} 節者不能自動代堂。08:00 班主任節要代（計 0.5 代堂），但不計入老師當日正規堂數。CLP、聯咨會、首席會、學務／學生／學校／資訊及創新等部會不是課堂：不用代、唔擋代堂，亦不計入當日堂數。</p>
+          <p>當日正規課堂多於 {MAX_OWN_LESSONS} 節者不能自動代堂。當日已有 {MAX_OWN_LESSONS} 堂者仍可代，但代後會變成 7 堂，會特別標示。08:00 班主任節要代（計 0.5 代堂），但不計入老師當日正規堂數。CLP、聯咨會、首席會、學務／學生／學校／資訊及創新等部會不是課堂：不用代、唔擋代堂，亦不計入當日堂數。</p>
           <p>同一人一日內代堂不能多過 {MAX_COVER_LOAD_PER_DAY} 堂（班主任節計 0.5）。</p>
           <p>學校假期、統測、考試、深度學習周、陸運會、開放日、教師發展日等無堂日無需代堂。</p>
           <p>同一人唔可以連續兩節代堂（例如代完第三節就不能代第四節）；同自己原本課堂相鄰則可以。</p>
@@ -895,7 +894,7 @@ function AssignedCoverRow({
   const options = eligibleCoverTeachers(data, plan.day, absentees, balances, slot, others, pickCtx);
   const extras = manualCoverTeachers(data, plan.day, absentees, balances, slot, others, pickCtx);
   const heavyOwn = coverAssignmentHeavyOwnLessons(data, plan.day, a);
-  const heavyNote = heavyOwn != null ? heavyOwnLoadNote(heavyOwn) : null;
+  const heavyNote = heavyOwn != null ? coverLoadNote(heavyOwn) : null;
   return (
     <tr
       className={cn(
@@ -1091,13 +1090,31 @@ function PlanTable({
       </div>
 
       {heavyCovers.length > 0 ? (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-          備註：以下代堂老師當日已有 7 堂或以上正規課（不能自動代堂，人手／通知表仍可編）
-          {heavyCovers.map((t) => (
-            <span key={t.teacherId} className="ml-2 font-medium">
-              {t.teacherName}（{t.ownLessons}堂）
-            </span>
-          ))}
+        <div className="space-y-2">
+          {heavyCovers.some((t) => t.ownLessons > MAX_OWN_LESSONS) ? (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              備註：以下代堂老師當日已有 7 堂或以上正規課（不能自動代堂，人手／通知表仍可編）
+              {heavyCovers
+                .filter((t) => t.ownLessons > MAX_OWN_LESSONS)
+                .map((t) => (
+                  <span key={t.teacherId} className="ml-2 font-medium">
+                    {t.teacherName}（{t.ownLessons}堂）
+                  </span>
+                ))}
+            </div>
+          ) : null}
+          {heavyCovers.some((t) => t.ownLessons === MAX_OWN_LESSONS) ? (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              備註：以下代堂老師當日已有 6 堂正規課，代後共 7 堂
+              {heavyCovers
+                .filter((t) => t.ownLessons === MAX_OWN_LESSONS)
+                .map((t) => (
+                  <span key={t.teacherId} className="ml-2 font-medium">
+                    {t.teacherName}（6堂→7堂）
+                  </span>
+                ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -1192,8 +1209,13 @@ function PlanTable({
 }
 
 function coverOptionLabel(o: EligibleCover) {
-  const load =
-    !o.combine && isHeavyOwnLoad(o.ownLessons) ? ` · 當日${o.ownLessons}堂` : "";
+  const load = o.combine
+    ? ""
+    : o.ownLessons > MAX_OWN_LESSONS
+      ? ` · 當日${o.ownLessons}堂`
+      : o.ownLessons === MAX_OWN_LESSONS
+        ? " · 代後7堂"
+        : "";
   return `${o.teacher.name}（${o.teacher.code}）${o.combine ? "合班不計" : o.balance}${load}`;
 }
 
