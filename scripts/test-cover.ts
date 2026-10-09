@@ -36,7 +36,7 @@ import {
   wouldExceedConsecutiveCoverDays,
   buildCoverDatesByTeacher,
 } from "../src/lib/cover";
-import { ensureHomeroomLessons } from "../src/lib/homeroom";
+import { prepareSchedule, RESIGNED_COVER_REASON } from "../src/lib/schedule-corrections";
 import { isAdminDutySubject, isNonRegularLesson } from "../src/lib/lesson-kind";
 import { coverPdfFilename, coverPdfRows, formatCoverFormDate } from "../src/lib/cover-pdf";
 import { renderCoverPdf } from "../src/lib/cover-pdf-server";
@@ -808,8 +808,34 @@ const F = teacher("F", "己");
 }
 
 {
-  const live = ensureHomeroomLessons(
+  const live = prepareSchedule(
     JSON.parse(readFileSync("data/schedule.json", "utf8")) as ScheduleData,
+  );
+  assert.deepEqual(live.classes.find((c) => c.id === "2A")?.classTeacherIds, ["會"]);
+  const yuMon = slotsToCover(live, "mon", ["余"]);
+  assert.ok(
+    yuMon.some((s) => s.classIds.includes("2A") && s.subject === "中文"),
+    "余沛峰代林紀彤：星期一 2A 中文要代",
+  );
+  assert.ok(
+    !slotsToCover(live, "mon", ["彤"]).some((s) => s.subject === "中文"),
+    "林紀彤已辭職，課堂不再掛喺佢名下",
+  );
+  const hr2a = live.lessons.find(
+    (l) => l.periodId === "hr" && l.day === "mon" && l.classIds.includes("2A"),
+  );
+  const hrSlot = {
+    periodId: "hr",
+    classIds: ["1A"],
+    subject: "班主任節",
+    roomId: "201",
+    teacherId: "鳳",
+    teacherName: "黃轉鳳",
+  };
+  assert.deepEqual(hr2a?.teacherIds, ["會"]);
+  assert.equal(
+    coverAssignBlockReason(live, "mon", new Set(["鳳"]), hrSlot, [], "彤"),
+    RESIGNED_COVER_REASON,
   );
   assert.equal(ownTeachingLoadOnDay(live, "龍", "tue"), 2, "正式課表：梁國龍星期二只計兩堂");
   const 龍cover = slotsToCover(live, "tue", ["龍"]);

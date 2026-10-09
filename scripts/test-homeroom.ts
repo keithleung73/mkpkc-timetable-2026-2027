@@ -8,6 +8,7 @@ import {
   HOMEROOM_PERIOD_ID,
   HOMEROOM_SUBJECT,
 } from "../src/lib/homeroom";
+import { prepareSchedule } from "../src/lib/schedule-corrections";
 import { buildLeaveUnits } from "../src/lib/swap";
 import type { Lesson, ScheduleData, Teacher } from "../src/lib/types";
 
@@ -107,15 +108,36 @@ const 代 = teacher("代", "代課甲");
 }
 
 {
-  const live = ensureHomeroomLessons(
+  const live = prepareSchedule(
     JSON.parse(readFileSync("data/schedule.json", "utf8")) as ScheduleData,
   );
   const cls = live.classes.find((c) => c.id === "2A");
-  assert.ok(cls?.classTeacherIds.includes("彤"));
-  const slots = slotsToCover(live, "mon", ["彤"]);
+  assert.deepEqual(cls?.classTeacherIds, ["會"]);
+  const 會 = live.teachers.find((t) => t.id === "會");
+  const 余 = live.teachers.find((t) => t.id === "余");
+  const 彤 = live.teachers.find((t) => t.id === "彤");
+  assert.equal(會?.name, "朱會強");
+  assert.equal(余?.name, "余沛峰");
+  assert.ok(彤?.name.includes("已辭職"));
   assert.ok(
-    slots.some((s) => s.periodId === "hr" && s.classIds.includes("2A")),
-    "正式課表：2A 林紀彤星期一班主任節要代",
+    !live.lessons.some((l) => l.teacherIds.includes("彤")),
+    "林紀彤課堂已交余沛峰",
+  );
+  assert.ok(
+    live.lessons.some(
+      (l) => l.teacherIds.includes("余") && l.classIds.includes("2A") && l.subject === "中文",
+    ),
+    "2A 中文由余沛峰任教",
+  );
+  const slots = slotsToCover(live, "mon", ["會"]);
+  assert.ok(
+    slots.some((s) => s.periodId === "hr" && s.classIds.includes("2A") && s.teacherId === "會"),
+    "正式課表：2A 朱會強星期一班主任節要代",
+  );
+  const resignedAway = slotsToCover(live, "mon", ["彤"]);
+  assert.ok(
+    !resignedAway.some((s) => s.periodId === "hr" && s.classIds.includes("2A")),
+    "林紀彤已辭職，不再代 2A 班主任節",
   );
   const oneOfTwo = slotsToCover(live, "mon", ["鳳"]);
   assert.ok(

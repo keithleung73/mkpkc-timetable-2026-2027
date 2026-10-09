@@ -14,6 +14,7 @@
     "seed": "tsx scripts/import-official.ts",
     "test:cover": "tsx scripts/test-cover.ts",
     "test:homeroom": "tsx scripts/test-homeroom.ts",
+    "test:corrections": "tsx scripts/test-schedule-corrections.ts",
     "test:swap": "tsx scripts/test-swap.ts",
     "test:calendar": "tsx scripts/test-calendar.ts",
     "test:parse": "tsx scripts/test-parse-timetable.ts",
