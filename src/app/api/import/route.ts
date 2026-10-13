@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { importExcels } from "@/lib/excel";
 import { buildOfficialSchedule } from "@/lib/parse-teacher-timetable";
+import { prepareSchedule } from "@/lib/schedule-corrections";
 import { writeSchedule } from "@/lib/store";
 
 export const runtime = "nodejs";
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
   const tt = files.find((f) => isTeacherTimetable(f.buffer));
   const assign = files.find((f) => isAssignment(f.buffer, f.name));
   if (tt) {
-    const data = buildOfficialSchedule(tt.buffer, assign?.buffer);
+    const data = prepareSchedule(buildOfficialSchedule(tt.buffer, assign?.buffer));
     writeSchedule(data);
     return NextResponse.json({
       ok: true,

@@ -467,8 +467,23 @@
     },
     {
       "id": "彤",
-      "name": "林紀彤 LAM KEI TUNG",
+      "name": "林紀彤 LAM KEI TUNG（已辭職）",
       "code": "彤",
+      "subjects": [
+        "中文",
+        "普話",
+        "重摘課",
+        "2A 中文",
+        "5B 5C 中文",
+        "1A 1B 1C 1D 1E 普通話",
+        "2A 2B 普通話",
+        "2A(1) LCL"
+      ]
+    },
+    {
+      "id": "余",
+      "name": "余沛峰",
+      "code": "余",
       "subjects": [
         "中文",
         "普話",
@@ -1229,7 +1244,7 @@
       "form": 2,
       "homeRoom": "301",
       "classTeacherIds": [
-        "彤"
+        "會"
       ]
     },
     {
@@ -14441,7 +14456,7 @@
       "day": "mon",
       "periodId": "p1",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "5C"
@@ -14455,7 +14470,7 @@
       "day": "mon",
       "periodId": "p2",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "5C"
@@ -14469,7 +14484,7 @@
       "day": "mon",
       "periodId": "p3",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "5B"
@@ -14483,7 +14498,7 @@
       "day": "mon",
       "periodId": "p4",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "5B"
@@ -14497,7 +14512,7 @@
       "day": "mon",
       "periodId": "p7",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "2A"
@@ -14511,7 +14526,7 @@
       "day": "mon",
       "periodId": "p8",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "2A"
@@ -14525,7 +14540,7 @@
       "day": "tue",
       "periodId": "p3",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "1B"
@@ -14539,7 +14554,7 @@
       "day": "tue",
       "periodId": "p4",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "1D"
@@ -14553,7 +14568,7 @@
       "day": "tue",
       "periodId": "p5",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "1C"
@@ -14567,7 +14582,7 @@
       "day": "tue",
       "periodId": "p7",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "1A"
@@ -14581,7 +14596,7 @@
       "day": "wed",
       "periodId": "p1",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [],
       "subject": "CLP 中二中文 芳 蕭 莫",
@@ -14593,7 +14608,7 @@
       "day": "wed",
       "periodId": "p2",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [],
       "subject": "CLP 中五中文 芳 蕭 霞",
@@ -14605,7 +14620,7 @@
       "day": "wed",
       "periodId": "p3",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "5B"
@@ -14619,7 +14634,7 @@
       "day": "wed",
       "periodId": "p6",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "2A"
@@ -14633,7 +14648,7 @@
       "day": "wed",
       "periodId": "p7",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "2A"
@@ -14647,7 +14662,7 @@
       "day": "wed",
       "periodId": "p8",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "2A"
@@ -14661,7 +14676,7 @@
       "day": "thu",
       "periodId": "p2",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "2B"
@@ -14675,7 +14690,7 @@
       "day": "thu",
       "periodId": "p3",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "5B"
@@ -14689,7 +14704,7 @@
       "day": "thu",
       "periodId": "p4",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "5B"
@@ -14703,7 +14718,7 @@
       "day": "thu",
       "periodId": "p5",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "5C"
@@ -14717,7 +14732,7 @@
       "day": "thu",
       "periodId": "p6",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "5C"
@@ -14731,7 +14746,7 @@
       "day": "thu",
       "periodId": "p7",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "2A"
@@ -14745,7 +14760,7 @@
       "day": "thu",
       "periodId": "p8",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "1E"
@@ -14759,7 +14774,7 @@
       "day": "thu",
       "periodId": "p9",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "2A"
@@ -14773,7 +14788,7 @@
       "day": "fri",
       "periodId": "p3",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "5B"
@@ -14787,7 +14802,7 @@
       "day": "fri",
       "periodId": "p4",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "5B"
@@ -14801,7 +14816,7 @@
       "day": "fri",
       "periodId": "p5",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "2A"
@@ -14815,7 +14830,7 @@
       "day": "fri",
       "periodId": "p6",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "2A"
@@ -14829,7 +14844,7 @@
       "day": "fri",
       "periodId": "p7",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "5C"
@@ -14843,7 +14858,7 @@
       "day": "fri",
       "periodId": "p8",
       "teacherIds": [
-        "彤"
+        "余"
       ],
       "classIds": [
         "5C"
@@ -32568,6 +32583,76 @@
       "subject": "資通",
       "roomId": "N404",
       "note": "分組／選修",
+      "kind": "lesson"
+    },
+    {
+      "id": "hr|mon|2A",
+      "day": "mon",
+      "periodId": "hr",
+      "classIds": [
+        "2A"
+      ],
+      "teacherIds": [
+        "會"
+      ],
+      "subject": "班主任節",
+      "roomId": "301",
+      "kind": "lesson"
+    },
+    {
+      "id": "hr|tue|2A",
+      "day": "tue",
+      "periodId": "hr",
+      "classIds": [
+        "2A"
+      ],
+      "teacherIds": [
+        "會"
+      ],
+      "subject": "班主任節",
+      "roomId": "301",
+      "kind": "lesson"
+    },
+    {
+      "id": "hr|wed|2A",
+      "day": "wed",
+      "periodId": "hr",
+      "classIds": [
+        "2A"
+      ],
+      "teacherIds": [
+        "會"
+      ],
+      "subject": "班主任節",
+      "roomId": "301",
+      "kind": "lesson"
+    },
+    {
+      "id": "hr|thu|2A",
+      "day": "thu",
+      "periodId": "hr",
+      "classIds": [
+        "2A"
+      ],
+      "teacherIds": [
+        "會"
+      ],
+      "subject": "班主任節",
+      "roomId": "301",
+      "kind": "lesson"
+    },
+    {
+      "id": "hr|fri|2A",
+      "day": "fri",
+      "periodId": "hr",
+      "classIds": [
+        "2A"
+      ],
+      "teacherIds": [
+        "會"
+      ],
+      "subject": "班主任節",
+      "roomId": "301",
       "kind": "lesson"
     }
   ]

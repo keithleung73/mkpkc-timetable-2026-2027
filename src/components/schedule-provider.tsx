@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { scheduleDataUrl } from "@/lib/runtime";
+import { prepareSchedule } from "@/lib/schedule-corrections";
 import type { ScheduleData } from "@/lib/types";
 
 type Ctx = {
@@ -21,7 +22,7 @@ const ScheduleContext = createContext<Ctx>({
 async function fetchSchedule(): Promise<ScheduleData> {
   const res = await fetch(scheduleDataUrl(), { cache: "no-store" });
   if (!res.ok) throw new Error("無法載入課表");
-  return res.json();
+  return prepareSchedule(await res.json());
 }
 
 export function ScheduleProvider({ children }: { children: React.ReactNode }) {

@@ -5,6 +5,7 @@ import {
   ALL_TEACHING_PERIODS,
   DAYS,
   formatTimeRange,
+  HOMEROOM_PERIOD,
   LESSON_PERIODS,
   periodLabel,
   subjectClass,
@@ -25,7 +26,12 @@ export function TimetableGrid({
   emptyLabel?: string;
   showFridayP9?: boolean;
 }) {
-  const periods = showFridayP9 ? ALL_TEACHING_PERIODS : [...LESSON_PERIODS, ...ALL_TEACHING_PERIODS.filter((p) => p.id === "p9")];
+  const basePeriods = showFridayP9
+    ? ALL_TEACHING_PERIODS
+    : [...LESSON_PERIODS, ...ALL_TEACHING_PERIODS.filter((p) => p.id === "p9")];
+  const periods = lessons.some((l) => l.periodId === HOMEROOM_PERIOD.id)
+    ? [HOMEROOM_PERIOD, ...basePeriods]
+    : basePeriods;
   const uniquePeriods = periods.filter(
     (p, i, arr) => arr.findIndex((x) => x.id === p.id) === i,
   );

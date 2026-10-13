@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ScheduleData } from "./types";
 import { generateSeed } from "./seed";
+import { prepareSchedule } from "./schedule-corrections";
 import { buildOfficialSchedule } from "./parse-teacher-timetable";
 
 const DATA_PATH = path.join(process.cwd(), "data", "schedule.json");
@@ -13,6 +14,11 @@ const OFFICIAL_ASSIGN = path.join(process.cwd(), "data", "official", "teachers-a
 function ensureDir() {
   const dir = path.dirname(DATA_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+function persist(data: ScheduleData) {
+  ensureDir();
+  fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2), "utf8");
 }
 
 export function loadOfficialSchedule(): ScheduleData | null {
@@ -25,24 +31,22 @@ export function loadOfficialSchedule(): ScheduleData | null {
 export function readSchedule(): ScheduleData {
   ensureDir();
   if (!fs.existsSync(DATA_PATH)) {
-    const official = loadOfficialSchedule();
-    const data = official ?? generateSeed();
-    fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2), "utf8");
+    const data = prepareSchedule(loadOfficialSchedule() ?? generateSeed());
+    persist(data);
     return data;
   }
   const raw = fs.readFileSync(DATA_PATH, "utf8");
-  return JSON.parse(raw) as ScheduleData;
+  return prepareSchedule(JSON.parse(raw) as ScheduleData);
 }
 
 export function writeSchedule(data: ScheduleData) {
-  ensureDir();
-  fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2), "utf8");
+  persist(prepareSchedule(data));
 }
 
 export function resetSchedule(): ScheduleData {
-  const official = loadOfficialSchedule();
-  const data = official ?? generateSeed();
+  const data = loadOfficialSchedule() ?? generateSeed();
   data.meta.updatedAt = new Date().toISOString();
-  writeSchedule(data);
-  return data;
+  const next = prepareSchedule(data);
+  persist(next);
+  return next;
 }
