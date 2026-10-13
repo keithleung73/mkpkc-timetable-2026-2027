@@ -1,7 +1,15 @@
 import { COVER_PERIOD_IDS, periodLabel as periodLabelFromConstants } from "./constants";
+import { isResignedTeacher } from "./schedule-corrections";
 import type { DayId, Lesson, ScheduleData, Teacher } from "./types";
 
 export const MAX_OWN_LESSONS = 6;
+
+/** 當日已有 6 堂再代一堂。 */
+export const SIX_LESSON_COVER_NOTE = "代後共 7 堂";
+
+export function coverLoadNote(ownLessons: number): string | null {
+  return ownLessons === MAX_OWN_LESSONS ? SIX_LESSON_COVER_NOTE : null;
+}
 
 /** 盡量避免編代堂（軟限制：無人可代時仍可編；亦可人手改派） */
 export const COVER_AVOID_TEACHER_NAMES = [
@@ -280,6 +288,7 @@ export function eligibleCoverTeachers(
   const out: EligibleCover[] = [];
   for (const teacher of data.teachers) {
     if (absentees.has(teacher.id)) continue;
+    if (isResignedTeacher(teacher.id) || teacher.name.includes("已辭職")) continue;
     if (takenThisPeriod.has(teacher.id)) continue;
     const own = teachingLessonsOnDay(data, teacher.id, day).length;
     if (own > MAX_OWN_LESSONS) continue;
@@ -318,6 +327,8 @@ function pickReason(pick: EligibleCover) {
   const notes: string[] = [];
   if (pick.consecutiveDayRisk) notes.push("本週已連續代堂");
   if (pick.avoidPreferred) notes.push("盡量少編名單");
+  const loadNote = coverLoadNote(pick.ownLessons);
+  if (loadNote) notes.push(loadNote);
   const suffix = notes.length ? `；${notes.join("、")}` : "";
   return `${sign}（${pick.balance}），當日原有 ${pick.ownLessons} 堂${suffix}`;
 }

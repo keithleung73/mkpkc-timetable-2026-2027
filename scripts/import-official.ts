@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildOfficialSchedule } from "../src/lib/parse-teacher-timetable";
+import { prepareSchedule } from "../src/lib/schedule-corrections";
 
 const tt = readFileSync(join(process.cwd(), "data", "official", "teacher-timetables.xlsx"));
 const assignPath = join(process.cwd(), "data", "official", "teachers-assignment.xlsx");
@@ -10,7 +11,7 @@ try {
 } catch {
   assign = undefined;
 }
-const data = buildOfficialSchedule(tt, assign);
+const data = prepareSchedule(buildOfficialSchedule(tt, assign));
 const out = join(process.cwd(), "data", "schedule.json");
 writeFileSync(out, JSON.stringify(data, null, 2), "utf8");
 const hua = data.lessons.filter((l) => l.teacherIds.includes("華") && l.kind !== "meeting");

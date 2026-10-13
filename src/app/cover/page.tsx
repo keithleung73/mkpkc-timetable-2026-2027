@@ -21,11 +21,13 @@ import {
   assignmentKey,
   buildCoverDatesByTeacher,
   COVER_AVOID_TEACHER_NAMES,
+  coverLoadNote,
   eligibleCoverTeachers,
   generateCoverPlan,
   hkTodayIso,
   MAX_CONSECUTIVE_COVER_DAYS,
   MAX_OWN_LESSONS,
+  SIX_LESSON_COVER_NOTE,
   previewDeltas,
   reassignCover,
   slotKey,
@@ -232,7 +234,8 @@ function Inner() {
         <CardContent className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
           <p>請假同事每堂 −1；成功代堂同事每堂 +1。未能編配嘅堂，請假人仍然扣分。</p>
           <p>病假／請假較多（結餘較負）者優先代堂，其後先睇當日原有堂數。</p>
-          <p>當日原有課堂多於 {MAX_OWN_LESSONS} 節者不能代堂。</p>
+          <p>當日原有課堂多於 {MAX_OWN_LESSONS} 節者不能代堂。當日已有 {MAX_OWN_LESSONS} 堂再代會標示「{SIX_LESSON_COVER_NOTE}」。</p>
+          <p>已辭職同事無課堂，不會被編代堂。</p>
           <p>同一人唔可以連續兩節代堂（例如代完第三節就不能代第四節）；同自己原本課堂相鄰則可以。</p>
           <p>
             盡量唔編：{COVER_AVOID_TEACHER_NAMES.join("、")}
@@ -522,6 +525,9 @@ function PlanTable({
   if (!data) return null;
   const deltas = previewDeltas(plan);
   const absentees = new Set(plan.absentees);
+  const sixLessonCovers = plan.assignments.filter(
+    (a) => teachingLessonsOnDay(data, a.coverTeacherId, plan.day).length === MAX_OWN_LESSONS,
+  );
   const pickCtx: CoverPickContext = {
     date: plan.date,
     coverDatesByTeacher: buildCoverDatesByTeacher(history, plan.date),
@@ -535,6 +541,17 @@ function PlanTable({
           需代 {plan.slots.length} 堂 · 已編 {plan.assignments.length} · 未編 {plan.leftover.length}
         </span>
       </div>
+
+      {sixLessonCovers.length > 0 ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          備註：以下代堂老師當日已有 6 堂，{SIX_LESSON_COVER_NOTE}
+          {sixLessonCovers.map((a) => (
+            <span key={assignmentKey(a)} className="ml-2 font-medium">
+              {a.coverTeacherName}（6堂→7堂）
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       <div className="overflow-x-auto rounded-xl border">
         <table className="w-full min-w-[52rem] text-sm">
@@ -592,6 +609,7 @@ function PlanTable({
                         {options.map((o) => (
                           <SelectItem key={o.teacher.id} value={o.teacher.id}>
                             {o.teacher.name}（{o.teacher.code}）{o.balance}
+                            {coverLoadNote(o.ownLessons) ? ` · ${coverLoadNote(o.ownLessons)}` : ""}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -645,6 +663,7 @@ function PlanTable({
                           {options.map((o) => (
                             <SelectItem key={o.teacher.id} value={o.teacher.id}>
                               {o.teacher.name}（{o.teacher.code}）{o.balance}
+                              {coverLoadNote(o.ownLessons) ? ` · ${coverLoadNote(o.ownLessons)}` : ""}
                             </SelectItem>
                           ))}
                         </SelectContent>
