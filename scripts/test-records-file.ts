@@ -64,7 +64,6 @@ const plan: SavedCoverPlan = {
   assert.equal(file.kind, RECORDS_FILE_KIND);
   assert.equal(recordsFileName(file.exportedAt), "萬鈞伯裘書院-代調堂記錄-2026-10-14.json");
   const parsed = parseRecordsFile(JSON.stringify(file));
-  assert.ok(!("error" in parsed));
   if ("error" in parsed) throw new Error(parsed.error);
   assert.equal(parsed.plans.length, 1);
   assert.equal(parsed.swaps.length, 1);
