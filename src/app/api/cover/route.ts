@@ -4,6 +4,7 @@ import {
   generateCoverPlan,
   mergeCoverSlotIntoPlan,
   type CoverAssignment,
+  type CoverBalances,
   type CoverPlan,
   type SavedCoverPlan,
   undoBalances,
@@ -14,6 +15,7 @@ import { parseLeaveKind, type LeaveKind } from "@/lib/leave";
 import { coverDateError } from "@/lib/school-calendar";
 import { readCoverStore, writeCoverStore } from "@/lib/cover-store";
 import { mergeOfficialArrangementImport } from "@/lib/official-arrangements";
+import { parseRecordsFile, replaceRecordsFromFile } from "@/lib/records-file";
 import { readSchedule } from "@/lib/store";
 import { applyConfirmedSwaps, type ConfirmedSwap } from "@/lib/swap-records";
 import { readSwapStore, writeSwapStore } from "@/lib/swap-store";
@@ -40,6 +42,8 @@ type Body = {
   leaveKinds?: Record<string, LeaveKind>;
   plans?: SavedCoverPlan[];
   swaps?: ConfirmedSwap[];
+  balances?: CoverBalances;
+  mode?: "replace" | "merge";
 };
 
 function scheduleForDate(date: string) {
@@ -211,6 +215,49 @@ export async function POST(req: Request) {
       balances: next.balances,
       plans: next.plans,
       swaps: readSwapStore().swaps,
+    });
+  }
+
+  if (action === "importRecords") {
+    const parsed = parseRecordsFile({
+      balances: body.balances,
+      plans: body.plans,
+      swaps: body.swaps,
+    });
+    if ("error" in parsed) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    if (body.mode === "merge") {
+      const merged = mergeOfficialArrangementImport(store, readSwapStore().swaps, {
+        plans: parsed.plans,
+        swaps: parsed.swaps,
+        warnings: [],
+        summary: {
+          dates: [...new Set(parsed.plans.map((p) => p.date))],
+          coverCount: 0,
+          combineCount: 0,
+          swapCount: parsed.swaps.length,
+          leftoverCount: 0,
+          unmatchedTeachers: [],
+        },
+      });
+      writeCoverStore({ balances: merged.balances, plans: merged.plans });
+      writeSwapStore({ swaps: merged.swaps });
+      return NextResponse.json({
+        ok: true,
+        balances: merged.balances,
+        plans: merged.plans,
+        swaps: merged.swaps,
+      });
+    }
+    const next = replaceRecordsFromFile(parsed);
+    writeCoverStore({ balances: next.balances, plans: next.plans });
+    writeSwapStore({ swaps: next.swaps });
+    return NextResponse.json({
+      ok: true,
+      balances: next.balances,
+      plans: next.plans,
+      swaps: next.swaps,
     });
   }
 

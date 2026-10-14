@@ -6,6 +6,7 @@ import {
   validateCoverPlan,
   weekdayFromIsoDate,
   type CoverAssignment,
+  type CoverBalances,
   type CoverPlan,
   type SavedCoverPlan,
 } from "./cover";
@@ -28,6 +29,7 @@ import {
   type ConfirmedSwap,
 } from "./swap-records";
 import { mergeOfficialArrangementImport } from "./official-arrangements";
+import { parseRecordsFile, replaceRecordsFromFile } from "./records-file";
 import type { SwapMode, SwapPeriodPair } from "./swap-rules";
 import type { ScheduleData } from "./types";
 
@@ -69,6 +71,8 @@ export type CoverBody = {
   leaveKinds?: Record<string, LeaveKind>;
   plans?: SavedCoverPlan[];
   swaps?: ConfirmedSwap[];
+  balances?: CoverBalances;
+  mode?: "replace" | "merge";
 };
 
 type Err = { error: string };
@@ -314,6 +318,37 @@ export function localCoverPost(data: ScheduleData, body: CoverBody) {
     const next = { balances, plans: [saved, ...remaining].slice(0, 80) };
     saveCoverStore(next);
     return { ok: true, saved, balances: next.balances, plans: next.plans, swaps: loadSwapStore().swaps };
+  }
+
+  if (action === "importRecords") {
+    const parsed = parseRecordsFile({
+      balances: body.balances,
+      plans: body.plans,
+      swaps: body.swaps,
+    });
+    if ("error" in parsed) return fail(parsed.error);
+    if (body.mode === "merge") {
+      const merged = mergeOfficialArrangementImport(store, loadSwapStore().swaps, {
+        plans: parsed.plans,
+        swaps: parsed.swaps,
+        warnings: [],
+        summary: {
+          dates: [...new Set(parsed.plans.map((p) => p.date))],
+          coverCount: 0,
+          combineCount: 0,
+          swapCount: parsed.swaps.length,
+          leftoverCount: 0,
+          unmatchedTeachers: [],
+        },
+      });
+      saveCoverStore({ balances: merged.balances, plans: merged.plans });
+      saveSwapStore({ swaps: merged.swaps });
+      return { ok: true, balances: merged.balances, plans: merged.plans, swaps: merged.swaps };
+    }
+    const next = replaceRecordsFromFile(parsed);
+    saveCoverStore({ balances: next.balances, plans: next.plans });
+    saveSwapStore({ swaps: next.swaps });
+    return { ok: true, balances: next.balances, plans: next.plans, swaps: next.swaps };
   }
 
   if (action === "importOfficial") {

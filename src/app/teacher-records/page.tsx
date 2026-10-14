@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ClipboardList, Download, Printer } from "lucide-react";
+import { RecordsFileCard } from "@/components/records-file-card";
 import { toast } from "sonner";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
 import { useSchedule } from "@/components/schedule-provider";
@@ -18,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { hkTodayIso, type SavedCoverPlan } from "@/lib/cover";
+import { hkTodayIso, type CoverBalances, type SavedCoverPlan } from "@/lib/cover";
 import { formatCoverPoints } from "@/lib/homeroom";
 import { leaveKindLabel } from "@/lib/leave";
 import { classNames } from "@/lib/queries";
@@ -53,7 +54,7 @@ export default function TeacherRecordsPage() {
     <PageBody>
       <PageHeader
         title="代堂及調課記錄"
-        description="查閱每位老師的代堂同調堂紀錄（包括由《通知各部門調堂代堂安排》匯入嘅安排）。可揀每日、每星期、每月，或自訂日期區間，再輸出 Excel／CSV 或列印。"
+        description="查閱每位老師的代堂同調堂紀錄。可下載／上存完整紀錄檔，亦可揀區間輸出 Excel／CSV 或列印。"
       />
       <ScheduleGate>
         <TeacherRecordsInner />
@@ -72,6 +73,7 @@ function TeacherRecordsInner() {
   const [kind, setKind] = useState<"all" | TeacherRecordKind>("all");
   const [swaps, setSwaps] = useState<ConfirmedSwap[]>([]);
   const [plans, setPlans] = useState<SavedCoverPlan[]>([]);
+  const [balances, setBalances] = useState<CoverBalances>({});
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -81,6 +83,7 @@ function TeacherRecordsInner() {
         if (cancelled) return;
         setSwaps((swapJson as { swaps?: ConfirmedSwap[] }).swaps ?? []);
         setPlans((coverJson as { plans?: SavedCoverPlan[] }).plans ?? []);
+        setBalances((coverJson as { balances?: CoverBalances }).balances ?? {});
         setLoaded(true);
       })
       .catch((e) => {
@@ -127,6 +130,17 @@ function TeacherRecordsInner() {
 
   return (
     <div className="space-y-6 print:space-y-3">
+      <RecordsFileCard
+        data={data}
+        balances={balances}
+        plans={plans}
+        swaps={swaps}
+        onImported={(payload) => {
+          setPlans(payload.plans);
+          setSwaps(payload.swaps ?? []);
+          setBalances(payload.balances);
+        }}
+      />
       <Card className="print:hidden">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
