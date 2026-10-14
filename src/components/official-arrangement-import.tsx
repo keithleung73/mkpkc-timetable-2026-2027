@@ -105,7 +105,7 @@ export function OfficialArrangementImportCard({
           ) : (
             <span>點擊或拖放《通知各部門調堂代堂安排》.xlsx</span>
           )}
-        </FileDropArea
+        </FileDropArea>
         {preview ? (
           <div className="space-y-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
             <ul className="list-disc space-y-1 pl-5">

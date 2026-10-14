@@ -62,6 +62,7 @@ export function FileDropArea({
         multiple={multiple}
         disabled={disabled}
         className="absolute inset-0 z-10 cursor-pointer opacity-0 disabled:cursor-not-allowed"
+        title="選擇檔案"
         aria-label="選擇檔案"
         onChange={(e) => take(e.target.files)}
       />
