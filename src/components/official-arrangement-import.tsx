@@ -3,15 +3,18 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { FileSpreadsheet } from "lucide-react";
+import { EXCEL_ACCEPT, FileDropArea } from "@/components/file-drop-area";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CoverBalances, SavedCoverPlan } from "@/lib/cover";
 import {
+  isOfficialArrangementWorkbook,
   officialImportPreviewLines,
   parseOfficialArrangementWorkbook,
   resolveOfficialArrangements,
   type OfficialArrangementImport,
 } from "@/lib/official-arrangements";
+import { isExcelUploadName } from "@/lib/records-file";
 import type { ConfirmedSwap } from "@/lib/swap-records";
 import type { ScheduleData } from "@/lib/types";
 import { coverRequest } from "@/lib/web-ops";
@@ -37,11 +40,15 @@ export function OfficialArrangementImportCard({
     setFile(next);
     setPreview(null);
     if (!next || !data) return;
+    if (!isExcelUploadName(next.name)) {
+      toast.error("請上載 .xlsx / .xls / .xlsm 通知表");
+      return;
+    }
     setBusy(true);
     try {
       const buf = await next.arrayBuffer();
       const parsed = parseOfficialArrangementWorkbook(buf, { source: next.name });
-      if (parsed.rows.length === 0 && parsed.emptyDates.length === 0) {
+      if (!isOfficialArrangementWorkbook(parsed)) {
         toast.error("呢個檔唔似學務部《通知各部門調堂代堂安排》");
         return;
       }
@@ -87,15 +94,18 @@ export function OfficialArrangementImportCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground hover:bg-muted/40">
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            className="hidden"
-            onChange={(e) => void readFile(e.target.files?.[0] ?? null)}
-          />
-          {file ? <span className="text-foreground">{file.name}</span> : <span>點擊選擇通知各部門調堂代堂安排 .xlsx</span>}
-        </label>
+        <FileDropArea
+          accept={EXCEL_ACCEPT}
+          disabled={busy}
+          className="flex min-h-24 flex-col items-center justify-center rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground hover:bg-muted/40"
+          onFiles={(files) => void readFile(files[0] ?? null)}
+        >
+          {file ? (
+            <span className="text-foreground">{file.name}</span>
+          ) : (
+            <span>點擊或拖放《通知各部門調堂代堂安排》.xlsx</span>
+          )}
+        </FileDropArea>
         {preview ? (
           <div className="space-y-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
             <ul className="list-disc space-y-1 pl-5">

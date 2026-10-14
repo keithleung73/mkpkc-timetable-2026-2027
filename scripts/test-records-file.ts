@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { EXCEL_ACCEPT, RECORDS_UPLOAD_ACCEPT, fileMatchesAccept } from "../src/lib/file-accept";
 import {
   buildRecordsFile,
+  isExcelUploadName,
+  isJsonUploadName,
   parseRecordsFile,
   recordsFileName,
   recordsFileSummary,
@@ -141,6 +144,21 @@ const plan: SavedCoverPlan = {
   assert.ok(merged.plans.some((p) => p.id === "cover-old"));
   assert.equal(merged.swaps.length, 1);
   assert.equal(merged.swaps[0]?.id, "swap-new");
+}
+
+{
+  assert.equal(isExcelUploadName("26-27_通知各部門調堂代堂安排.xlsx"), true);
+  assert.equal(isExcelUploadName("plan.XLSM"), true);
+  assert.equal(isExcelUploadName("old.xls"), true);
+  assert.equal(isExcelUploadName("萬鈞伯裘書院-代調堂記錄-2026-10-14.json"), false);
+  assert.equal(isJsonUploadName("萬鈞伯裘書院-代調堂記錄-2026-10-14.json"), true);
+  assert.equal(isJsonUploadName("records.JSON"), true);
+  assert.equal(isJsonUploadName("a.xlsx"), false);
+  assert.equal(EXCEL_ACCEPT.includes("application/"), false);
+  assert.ok(fileMatchesAccept({ name: "a.xlsx", type: "" }, RECORDS_UPLOAD_ACCEPT));
+  assert.ok(fileMatchesAccept({ name: "a.json", type: "" }, RECORDS_UPLOAD_ACCEPT));
+  assert.equal(fileMatchesAccept({ name: "a.xlsx", type: "" }, EXCEL_ACCEPT), true);
+  assert.equal(fileMatchesAccept({ name: "a.json", type: "" }, EXCEL_ACCEPT), false);
 }
 
 console.log("records file tests passed");

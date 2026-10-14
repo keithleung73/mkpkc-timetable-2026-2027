@@ -125,6 +125,14 @@ export function buildRecordsFile(
   };
 }
 
+export function isExcelUploadName(name: string): boolean {
+  return /\.(xlsx|xls|xlsm)$/i.test(name.trim());
+}
+
+export function isJsonUploadName(name: string): boolean {
+  return /\.json$/i.test(name.trim());
+}
+
 export function recordsFileName(exportedAt = new Date().toISOString()): string {
   const day = exportedAt.slice(0, 10) || "export";
   return `萬鈞伯裘書院-代調堂記錄-${day}.json`;

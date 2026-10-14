@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { EXCEL_ACCEPT, FileDropArea } from "@/components/file-drop-area";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
 import { StaticModeBanner } from "@/components/static-mode-banner";
 import { useSchedule } from "@/components/schedule-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { OfficialArrangementImportCard } from "@/components/official-arrangement-import";
+import { isStaticExport } from "@/lib/runtime";
 
 const HINTS = [
   {
@@ -36,7 +38,11 @@ export default function ImportPage() {
     <PageBody>
       <PageHeader
         title="匯入 Excel"
-        description="上載學務發展部 Excel：教師／班級總表會覆蓋課表；《通知各部門調堂代堂安排》則匯入代堂同調堂紀錄。"
+        description={
+          isStaticExport
+            ? "上載學務發展部《通知各部門調堂代堂安排》Excel，匯入代堂同調堂紀錄。覆蓋課表（教師／班級總表）需要本機伺服器。"
+            : "上載學務發展部 Excel：教師／班級總表會覆蓋課表；《通知各部門調堂代堂安排》則匯入代堂同調堂紀錄。"
+        }
       />
       <ScheduleGate>
         <Inner />
@@ -94,61 +100,64 @@ function Inner() {
     }
   };
 
+  const hints = isStaticExport ? HINTS.slice(0, 1) : HINTS;
+
   return (
     <div className="space-y-6">
-      <StaticModeBanner feature="匯入課表 Excel" />
+      {isStaticExport ? <StaticModeBanner feature="覆蓋課表 Excel" /> : null}
       <OfficialArrangementImportCard data={data} />
-      <Card>
-        <CardHeader>
-          <CardTitle>上載檔案</CardTitle>
-          <CardDescription>
-            可一次過拖入「教師時間表」、配課總表、班級／特別室總表。現時資料來源：{data?.meta.source}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <label className="flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground hover:bg-muted/40">
-            <input
-              type="file"
-              accept=".xlsx,.xls"
+      {isStaticExport ? null : (
+        <Card>
+          <CardHeader>
+            <CardTitle>上載檔案</CardTitle>
+            <CardDescription>
+              可一次過拖入「教師時間表」、配課總表、班級／特別室總表。現時資料來源：{data?.meta.source}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <FileDropArea
+              accept={EXCEL_ACCEPT}
               multiple
-              className="hidden"
-              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-            />
-            {files.length === 0 ? (
-              <span>點擊或拖放 Excel（.xlsx）到呢度</span>
-            ) : (
-              <ul className="text-foreground">
-                {files.map((f) => (
-                  <li key={f.name}>{f.name}</li>
-                ))}
-              </ul>
-            )}
-          </label>
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => void onImport()} disabled={busy}>
-              {busy ? "處理中…" : "匯入並覆蓋課表"}
-            </Button>
-            <Button variant="outline" onClick={() => void onReset()} disabled={busy}>
-              還原示範課表
-            </Button>
-          </div>
-          {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          {warnings.length > 0 ? (
-            <div className="rounded-lg border bg-amber-50 p-3 text-sm text-amber-950">
-              <p className="font-medium">部分儲存格未能完全辨識（最多顯示 40 項）</p>
-              <ul className="mt-2 list-disc space-y-1 pl-5">
-                {warnings.map((w) => (
-                  <li key={w}>{w}</li>
-                ))}
-              </ul>
+              disabled={busy}
+              className="flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground hover:bg-muted/40"
+              onFiles={(next) => setFiles(next)}
+            >
+              {files.length === 0 ? (
+                <span>點擊或拖放 Excel（.xlsx）到呢度</span>
+              ) : (
+                <ul className="text-foreground">
+                  {files.map((f) => (
+                    <li key={f.name}>{f.name}</li>
+                  ))}
+                </ul>
+              )}
+            </FileDropArea>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => void onImport()} disabled={busy}>
+                {busy ? "處理中…" : "匯入並覆蓋課表"}
+              </Button>
+              <Button variant="outline" onClick={() => void onReset()} disabled={busy}>
+                還原示範課表
+              </Button>
             </div>
-          ) : null}
-        </CardContent>
-      </Card>
+            {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {warnings.length > 0 ? (
+              <div className="rounded-lg border bg-amber-50 p-3 text-sm text-amber-950">
+                <p className="font-medium">部分儲存格未能完全辨識（最多顯示 40 項）</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {warnings.map((w) => (
+                    <li key={w}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-3 md:grid-cols-2">
-        {HINTS.map((h) => (
+        {hints.map((h) => (
           <Card key={h.title}>
             <CardHeader>
               <CardTitle className="text-base">{h.title}</CardTitle>
@@ -158,28 +167,30 @@ function Inner() {
         ))}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>下載示範 Excel</CardTitle>
-          <CardDescription>
-            格式對齊 1.0／2.0／3.0 總表，可用嚟試匯入流程；正式檔上載後會取代示範堂次。
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <a href="/api/samples/file?kind=class">
-            <Button variant="outline">班級總表</Button>
-          </a>
-          <a href="/api/samples/file?kind=teacher">
-            <Button variant="outline">老師總表</Button>
-          </a>
-          <a href="/api/samples/file?kind=room">
-            <Button variant="outline">特別室總表</Button>
-          </a>
-          <a href="/api/samples/file?kind=assign">
-            <Button variant="outline">配課總表</Button>
-          </a>
-        </CardContent>
-      </Card>
+      {isStaticExport ? null : (
+        <Card>
+          <CardHeader>
+            <CardTitle>下載示範 Excel</CardTitle>
+            <CardDescription>
+              格式對齊 1.0／2.0／3.0 總表，可用嚟試匯入流程；正式檔上載後會取代示範堂次。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <a href="/api/samples/file?kind=class">
+              <Button variant="outline">班級總表</Button>
+            </a>
+            <a href="/api/samples/file?kind=teacher">
+              <Button variant="outline">老師總表</Button>
+            </a>
+            <a href="/api/samples/file?kind=room">
+              <Button variant="outline">特別室總表</Button>
+            </a>
+            <a href="/api/samples/file?kind=assign">
+              <Button variant="outline">配課總表</Button>
+            </a>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

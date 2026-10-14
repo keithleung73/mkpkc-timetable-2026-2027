@@ -54,7 +54,7 @@ export default function TeacherRecordsPage() {
     <PageBody>
       <PageHeader
         title="代堂及調課記錄"
-        description="查閱每位老師的代堂同調堂紀錄。可下載／上存完整紀錄檔，亦可揀區間輸出 Excel／CSV 或列印。"
+        description="查閱每位老師的代堂同調堂紀錄。可下載／上存完整紀錄檔（.json 或學務部通知表 Excel），亦可揀區間輸出報表 Excel／CSV 或列印。"
       />
       <ScheduleGate>
         <TeacherRecordsInner />
