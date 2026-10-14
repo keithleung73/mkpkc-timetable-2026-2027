@@ -31,6 +31,8 @@ export type CoverSlot = {
   roomId: string;
   teacherId: string;
   teacherName: string;
+  /** 公假／合班：入帳時唔加減結餘 */
+  skipBalance?: boolean;
 };
 
 export type CoverAssignment = {
@@ -44,6 +46,8 @@ export type CoverAssignment = {
   coverTeacherName: string;
   coverBalanceBefore: number;
   reason: string;
+  /** 公假／合班：入帳時唔加減結餘 */
+  skipBalance?: boolean;
 };
 
 export type CoverPlan = {
@@ -519,10 +523,12 @@ export function applyBalances(balances: CoverBalances, plan: CoverPlan): CoverBa
   const next = { ...balances };
   const covered = new Set(plan.assignments.map(assignmentKey));
   for (const a of plan.assignments) {
+    if (a.skipBalance) continue;
     next[a.absenteeId] = (next[a.absenteeId] ?? 0) - 1;
     next[a.coverTeacherId] = (next[a.coverTeacherId] ?? 0) + 1;
   }
   for (const slot of plan.slots) {
+    if (slot.skipBalance) continue;
     if (!covered.has(slotKey(slot))) {
       next[slot.teacherId] = (next[slot.teacherId] ?? 0) - 1;
     }
@@ -534,10 +540,12 @@ export function undoBalances(balances: CoverBalances, plan: CoverPlan): CoverBal
   const next = { ...balances };
   const covered = new Set(plan.assignments.map(assignmentKey));
   for (const a of plan.assignments) {
+    if (a.skipBalance) continue;
     next[a.absenteeId] = (next[a.absenteeId] ?? 0) + 1;
     next[a.coverTeacherId] = (next[a.coverTeacherId] ?? 0) - 1;
   }
   for (const slot of plan.slots) {
+    if (slot.skipBalance) continue;
     if (!covered.has(slotKey(slot))) {
       next[slot.teacherId] = (next[slot.teacherId] ?? 0) + 1;
     }

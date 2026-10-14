@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { FileDown, Repeat2 } from "lucide-react";
+import { ArrangementImportCard } from "@/components/arrangement-import";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
 import { StaticModeBanner } from "@/components/static-mode-banner";
 import { useSchedule } from "@/components/schedule-provider";
@@ -222,6 +223,12 @@ function Inner() {
   return (
     <div className="space-y-6">
       <StaticModeBanner feature="代堂編配／入帳" />
+      <ArrangementImportCard
+        onSaved={(saved) => {
+          setBalances(saved.balances);
+          setHistory(saved.plans);
+        }}
+      />
       {loadError ? (
         <p className="text-sm text-destructive">{loadError}</p>
       ) : null}

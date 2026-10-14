@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ArrowLeftRight, Plus, Repeat2, X } from "lucide-react";
+import { ArrangementImportCard } from "@/components/arrangement-import";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
 import { StaticModeBanner } from "@/components/static-mode-banner";
 import { useSchedule } from "@/components/schedule-provider";
@@ -23,6 +24,7 @@ import { hkTodayIso, weekdayFromIsoDate } from "@/lib/cover";
 import { classNames, roomName } from "@/lib/queries";
 import { filterTeachers } from "@/lib/search";
 import type { SwapPlan, SwapUnitResult } from "@/lib/swap";
+import type { SavedSwapRecord } from "@/lib/swap-records";
 import { cn } from "@/lib/utils";
 
 export default function SwapPage() {
@@ -48,6 +50,21 @@ function SwapInner() {
   const [swapFromDate, setSwapFromDate] = useState(hkTodayIso());
   const [plan, setPlan] = useState<SwapPlan | null>(null);
   const [busy, setBusy] = useState(false);
+  const [savedSwaps, setSavedSwaps] = useState<SavedSwapRecord[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/records", { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const json = (await res.json()) as { swaps?: SavedSwapRecord[] };
+        if (!cancelled) setSavedSwaps(json.swaps ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const teachers = useMemo(
     () => filterTeachers(data?.teachers ?? [], q),
@@ -106,6 +123,33 @@ function SwapInner() {
   return (
     <div className="space-y-6">
       <StaticModeBanner feature="調堂建議（需 API）" />
+      <ArrangementImportCard onSaved={(saved) => setSavedSwaps(saved.swaps)} />
+      {savedSwaps.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>已上存調堂紀錄</CardTitle>
+            <CardDescription>由通知表上存。再上存同一日會覆蓋該日紀錄。</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {savedSwaps.slice(0, 30).map((s) => (
+              <div key={s.id} className="rounded-lg border px-3 py-2 text-sm">
+                <div className="font-medium">
+                  {s.leaveDate} {dayLabel(s.leaveDay)} · {s.leaveTeacherName}{" "}
+                  {s.leavePeriodIds.map((id) => periodLabel(id)).join("、")}
+                  {s.leaveSubject ? ` ${s.leaveSubject}` : ""}
+                  {s.leaveClassIds.length ? ` ${s.leaveClassIds.join("、")}` : ""}
+                </div>
+                <div className="text-muted-foreground">
+                  調堂 ↔ {s.partnerTeacherName} · {s.partnerDate}{" "}
+                  {s.partnerPeriodIds.map((id) => periodLabel(id)).join("、")}
+                  {s.partnerSubject ? ` ${s.partnerSubject}` : ""}
+                  {s.reason ? ` · ${s.reason}` : ""}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle>工作項目：老師事假／公假要調堂安排</CardTitle>

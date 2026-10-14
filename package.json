@@ -13,7 +13,8 @@
     "lint": "eslint",
     "seed": "tsx scripts/import-official.ts",
     "test:cover": "tsx scripts/test-cover.ts",
-    "test:corrections": "tsx scripts/test-schedule-corrections.ts"
+    "test:corrections": "tsx scripts/test-schedule-corrections.ts",
+    "test:arrangements": "tsx scripts/test-arrangement-import.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
