@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Copy,
   DoorOpen,
+  CalendarClock,
   Repeat2,
   Search,
   Share2,
@@ -19,6 +20,7 @@ import { isStaticExport } from "@/lib/runtime";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
+import { TodayArrangementsCard } from "@/components/today-arrangements-card";
 import { useSchedule } from "@/components/schedule-provider";
 import { SCHOOL_NAME, SCHOOL_YEAR, dayLabel, formatTimeRange, periodLabel } from "@/lib/constants";
 import { currentDay, currentPeriodId, isTeachingPeriod } from "@/lib/clock";
@@ -74,6 +76,12 @@ const LINKS = [
     icon: Repeat2,
   },
   {
+    href: "/daily",
+    title: "當日代調",
+    desc: "即時查當日已入帳調堂同代堂；人手輸入已知外名單，睇每位已處理／未處理。",
+    icon: CalendarClock,
+  },
+  {
     href: "/teacher-records",
     title: "代堂及調課記錄",
     desc: "按老師查閱代堂同調堂紀錄（含匯入嘅學務部通知表）；可揀每日、每星期、每月或自訂區間，再輸出 Excel／CSV。",
@@ -121,6 +129,8 @@ function DashboardInner() {
         <Stat label="課堂紀錄" value={s.lessons} />
         <Stat label="特別室" value={s.specialRooms} />
       </div>
+
+      <TodayArrangementsCard />
 
       {isStaticExport && shareUrl ? (
         <Card>

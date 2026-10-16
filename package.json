@@ -20,6 +20,7 @@
     "test:parse": "tsx scripts/test-parse-timetable.ts",
     "test:records": "tsx scripts/test-teacher-records.ts",
     "test:records-file": "tsx scripts/test-records-file.ts",
+    "test:daily": "tsx scripts/test-daily-board.ts",
     "test:arrangements": "tsx scripts/test-official-arrangements.ts",
     "encrypt-data": "tsx scripts/encrypt-schedule.ts",
     "test:access": "tsx scripts/test-site-access.ts"

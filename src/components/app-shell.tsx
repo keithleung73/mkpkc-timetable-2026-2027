@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ArrowLeftRight,
+  CalendarClock,
   CalendarDays,
   ClipboardList,
   DoorOpen,
@@ -28,6 +29,7 @@ const NAV = [
   { href: "/classes", label: "班別課表", icon: DoorOpen },
   { href: "/swap", label: "調堂", icon: ArrowLeftRight },
   { href: "/cover", label: "代堂", icon: Repeat2 },
+  { href: "/daily", label: "當日代調", icon: CalendarClock },
   { href: "/teacher-records", label: "代調記錄", icon: ClipboardList },
   { href: "/import", label: "匯入 Excel", icon: FileSpreadsheet },
   { href: "/share", label: "給同事", icon: Share2, localOnly: true },

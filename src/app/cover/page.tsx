@@ -112,8 +112,17 @@ function Inner() {
   const day = weekdayFromIsoDate(date);
 
   useEffect(() => {
-    const fromUrl = new URLSearchParams(window.location.search).get("date");
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get("date");
     if (fromUrl && weekdayFromIsoDate(fromUrl)) setDate(fromUrl);
+    const ids = (params.get("absentees") ?? "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+    if (ids.length) {
+      setAbsentees(ids);
+      setLeaveKinds(Object.fromEntries(ids.map((id) => [id, DEFAULT_LEAVE_KIND])));
+    }
   }, []);
 
   useEffect(() => {
