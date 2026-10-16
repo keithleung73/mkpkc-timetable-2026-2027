@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowLeftRight, CalendarClock, Repeat2 } from "lucide-react";
+import { ArrowLeftRight, CalendarClock, Repeat2, X } from "lucide-react";
 import { PageBody, PageHeader, ScheduleGate } from "@/components/page-chrome";
 import { useSchedule } from "@/components/schedule-provider";
-import { TeacherMultiPicker } from "@/components/teacher-picker";
+import { TeacherPicker } from "@/components/teacher-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,8 +86,9 @@ function DailyInner() {
   }, []);
 
   useEffect(() => {
-    setRoster(loadDailyRoster(date));
-  }, [date]);
+    if (!loaded) return;
+    setRoster(mergeRosterIds(date, loadDailyRoster(date), plans, swaps));
+  }, [date, loaded, plans, swaps]);
 
   const updateRoster = (ids: string[]) => {
     const next = [...new Set(ids)];
@@ -207,7 +208,35 @@ function DailyInner() {
             ) : null}
           </div>
 
-          <TeacherMultiPicker teachers={data.teachers} value={roster} onChange={updateRoster} />
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <TeacherPicker
+              teachers={data.teachers.filter((t) => !roster.includes(t.id))}
+              value={null}
+              onChange={(id) => {
+                if (id) updateRoster([...roster, id]);
+              }}
+              placeholder="搜尋再加入一位老師"
+            />
+          </div>
+
+          {roster.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {roster.map((id) => {
+                const t = data.teachers.find((x) => x.id === id);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-full bg-[color:var(--school-navy)] px-2.5 py-1 text-xs text-white"
+                    onClick={() => updateRoster(roster.filter((x) => x !== id))}
+                  >
+                    {t ? `${t.name}（${t.code}）` : id}
+                    <X className="size-3" />
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
 
           {rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">未有外名單。輸入已知請假同事後會顯示處理進度。</p>
