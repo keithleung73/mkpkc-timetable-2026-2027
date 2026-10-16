@@ -73,6 +73,19 @@ function SwapInner() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const teacher = params.get("teacher")?.trim();
+    const date = params.get("date")?.trim();
+    if (teacher) setTeacherId(teacher);
+    if (date && weekdayFromIsoDate(date)) {
+      setLeaveDraft(date);
+      setLeaveDates([date]);
+      setLeaveKinds({ [date]: DEFAULT_LEAVE_KIND });
+      setSwapFromDate(date);
+    }
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     void swapRequest(null, undefined, "GET")
       .then((json) => {
