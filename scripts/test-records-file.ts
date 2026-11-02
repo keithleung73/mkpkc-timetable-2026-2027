@@ -10,6 +10,10 @@ import {
   replaceRecordsFromFile,
   RECORDS_FILE_KIND,
 } from "../src/lib/records-file";
+import {
+  publishedRecordsAreEmpty,
+  shouldApplyPublishedSnapshot,
+} from "../src/lib/records-snapshot";
 import { mergeOfficialArrangementImport } from "../src/lib/official-arrangements";
 import type { SavedCoverPlan } from "../src/lib/cover";
 import type { ConfirmedSwap } from "../src/lib/swap-records";
@@ -161,4 +165,31 @@ const plan: SavedCoverPlan = {
   assert.equal(fileMatchesAccept({ name: "a.json", type: "" }, EXCEL_ACCEPT), false);
 }
 
+function testPublishedSnapshot() {
+  const empty = parseRecordsFile({ kind: RECORDS_FILE_KIND, v: 1, balances: {}, plans: [], swaps: [] }, {
+    allowEmpty: true,
+  });
+  assert.ok(!("error" in empty));
+  assert.equal(publishedRecordsAreEmpty(empty), true);
+  assert.equal(shouldApplyPublishedSnapshot("2026-11-02T00:00:00.000Z", null, true), false);
+
+  const withBalances = parseRecordsFile(
+    { kind: RECORDS_FILE_KIND, v: 1, exportedAt: "2026-11-02T08:00:00.000Z", balances: { 振: -3 }, plans: [], swaps: [] },
+    { allowEmpty: true },
+  );
+  assert.ok(!("error" in withBalances));
+  assert.equal(withBalances.balances.振, -3);
+  assert.equal(publishedRecordsAreEmpty(withBalances), false);
+  assert.equal(shouldApplyPublishedSnapshot("2026-11-02T08:00:00.000Z", null, false), true);
+  assert.equal(
+    shouldApplyPublishedSnapshot("2026-11-02T08:00:00.000Z", "2026-11-02T08:00:00.000Z", false),
+    false,
+  );
+  assert.equal(
+    shouldApplyPublishedSnapshot("2026-11-03T08:00:00.000Z", "2026-11-02T08:00:00.000Z", false),
+    true,
+  );
+}
+
+testPublishedSnapshot();
 console.log("records file tests passed");

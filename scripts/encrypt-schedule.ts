@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { encryptUtf8, randomAccessKey } from "../src/lib/site-access";
+import { encryptRecordsSnapshot } from "./encrypt-records-data";
 
 const root = process.cwd();
 const keyPath = path.join(root, ".site-access-key");
@@ -29,6 +30,7 @@ async function main() {
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.writeFileSync(dest, `${JSON.stringify(blob, null, 2)}\n`);
   console.log("wrote data/schedule.enc.json");
+  await encryptRecordsSnapshot(key);
 }
 
 main().catch((err) => {

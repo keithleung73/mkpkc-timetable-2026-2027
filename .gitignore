@@ -23,6 +23,7 @@ data/official/*.xlsx
 /out/
 /public/data/schedule.json
 /public/data/schedule.enc.json
+/public/data/records.enc.json
 
 # production
 /build
