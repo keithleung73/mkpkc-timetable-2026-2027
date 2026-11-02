@@ -137,7 +137,7 @@ function DashboardInner() {
           <CardHeader>
             <CardTitle className="text-base">給同事的開啟連結</CardTitle>
             <CardDescription>
-              只將呢條完整連結（含 #k=）傳去 WhatsApp／電郵。冇呢段就開唔到課表；亦唔好公開貼上 GitHub。
+              只將呢條完整連結（含 ?k=）傳去 WhatsApp／電郵。WhatsApp 開呢條就得；舊嘅 #k= 連結喺 WhatsApp 會開到鎖屏。唔好公開貼上 GitHub。
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

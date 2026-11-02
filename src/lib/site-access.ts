@@ -1,4 +1,4 @@
-/** GitHub Pages 用：課表加密後才上庫，完整連結（#k=）先解得開。 */
+/** GitHub Pages 用：課表加密後才上庫，完整連結（?k=）先解得開。WhatsApp 會截走 #k=，所以分享用 query。 */
 
 export const ACCESS_PARAM = "k";
 export const ACCESS_STORAGE_KEY = "mkpkc.siteAccess.v1";
@@ -46,7 +46,61 @@ export function randomAccessKey(): string {
 
 export function githubPagesUnlockUrl(origin: string, code: string): string {
   const base = origin.endsWith("/") ? origin : `${origin}/`;
-  return `${base}#${ACCESS_PARAM}=${encodeURIComponent(code)}`;
+  const url = new URL(base);
+  url.searchParams.set(ACCESS_PARAM, code);
+  url.hash = "";
+  return url.href;
+}
+
+/** 開啟碼、或 WhatsApp 對話入面整條網址（含 ?k= / #k=）。 */
+export function parseAccessCodeInput(raw: string): string {
+  const trimmed = raw.trim().replace(/^['"]+|['"]+$/g, "");
+  if (!trimmed) return "";
+
+  const fromUrl = extractAccessCodeFromUrl(trimmed);
+  if (fromUrl) return fromUrl;
+
+  if (looksLikeUnlockUrl(trimmed)) {
+    const withScheme = /^(https?:)?\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    const extracted = extractAccessCodeFromUrl(withScheme);
+    if (extracted) return extracted;
+    return "";
+  }
+
+  const loose = trimmed.match(/[?#&]k=([^&\s#]+)/i);
+  if (loose?.[1]) return decodeUriComponentSafe(loose[1]);
+
+  return trimmed;
+}
+
+function looksLikeUnlockUrl(value: string): boolean {
+  return (
+    /^(https?:\/\/)/i.test(value) ||
+    /github\.io/i.test(value) ||
+    /mkpkc-timetable/i.test(value) ||
+    /[?#]k=/i.test(value)
+  );
+}
+
+function extractAccessCodeFromUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    const fromQuery = url.searchParams.get(ACCESS_PARAM)?.trim();
+    if (fromQuery) return decodeUriComponentSafe(fromQuery);
+    const fromHash = new URLSearchParams(url.hash.replace(/^#/, "")).get(ACCESS_PARAM)?.trim();
+    if (fromHash) return decodeUriComponentSafe(fromHash);
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function decodeUriComponentSafe(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 export function readStoredAccessCode(): string | null {
@@ -92,9 +146,9 @@ export function persistAccessCode(code: string) {
     /* ignore quota / private mode */
   }
   const url = new URL(window.location.href);
-  url.searchParams.delete(ACCESS_PARAM);
-  url.hash = `${ACCESS_PARAM}=${encodeURIComponent(trimmed)}`;
-  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  url.searchParams.set(ACCESS_PARAM, trimmed);
+  url.hash = "";
+  window.history.replaceState(null, "", `${url.pathname}${url.search}`);
 }
 
 export function clearAccessCode() {

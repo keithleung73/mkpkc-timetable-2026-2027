@@ -125,8 +125,10 @@ export default function SharePage() {
             </p>
             <p>
               4. 校外網上版要用學務部發出嘅<strong>完整開啟連結</strong>（網址含{" "}
+              <code className="rounded bg-muted px-1">?k=</code>
+              ）。WhatsApp 會食咗舊嘅{" "}
               <code className="rounded bg-muted px-1">#k=</code>
-              ）。冇呢段、或只打開 GitHub 倉庫，都睇唔到課表。
+              。冇開啟碼、或只打開 GitHub 倉庫，都睇唔到課表。
             </p>
           </CardContent>
         </Card>

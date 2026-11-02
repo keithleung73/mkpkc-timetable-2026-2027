@@ -27,9 +27,9 @@
 
 ## 網上查詢（只可用學務部連結）
 
-GitHub Free 若將倉庫轉私人，GitHub Pages 會被停用，所以倉庫保持公開，但**明文課表唔入庫**：GitHub 只見到加密檔。網上版要用學務部 WhatsApp／電郵發出嘅**完整開啟連結**（網址含 `#k=`）。冇呢段就只見到鎖屏，搜尋引擎亦唔會收錄。
+GitHub Free 若將倉庫轉私人，GitHub Pages 會被停用，所以倉庫保持公開，但**明文課表唔入庫**：GitHub 只見到加密檔。網上版要用學務部 WhatsApp／電郵發出嘅**完整開啟連結**（網址含 `?k=`）。WhatsApp 會截走舊嘅 `#k=`，所以分享用 query。冇開啟碼就只見到鎖屏，搜尋引擎亦唔會收錄。
 
-請唔好公開張貼 GitHub 倉庫或無 `#k=` 嘅網址。更新課表後喺學務部電腦執行 `npm run encrypt-data`，再發佈 Pages。
+請唔好公開張貼 GitHub 倉庫或無 `?k=` 嘅網址。更新課表後喺學務部電腦執行 `npm run encrypt-data`，再發佈 Pages。
 
 校內「共用啟動」仍然讀本機明文 `data/schedule.json`，同事喺校網打開唔使開啟碼。
 

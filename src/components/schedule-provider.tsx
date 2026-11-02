@@ -8,6 +8,7 @@ import {
   decryptUtf8,
   githubPagesUnlockUrl,
   isEncryptedBlob,
+  parseAccessCodeInput,
   persistAccessCode,
 } from "@/lib/site-access";
 import { SiteLockScreen } from "@/components/site-lock-screen";
@@ -104,8 +105,12 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }) {
 
   const unlock = useCallback(
     async (code: string) => {
-      const trimmed = code.trim();
-      if (!trimmed) return;
+      const trimmed = parseAccessCodeInput(code);
+      if (!trimmed) {
+        setLocked(true);
+        setError("請貼上完整開啟連結或開啟碼。");
+        return;
+      }
       setLoading(true);
       setError(null);
       try {
