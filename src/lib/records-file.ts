@@ -138,7 +138,10 @@ export function recordsFileName(exportedAt = new Date().toISOString()): string {
   return `萬鈞伯裘書院-代調堂記錄-${day}.json`;
 }
 
-export function parseRecordsFile(raw: unknown): ParsedRecordsFile | { error: string } {
+export function parseRecordsFile(
+  raw: unknown,
+  opts?: { allowEmpty?: boolean },
+): ParsedRecordsFile | { error: string } {
   if (typeof raw === "string") {
     try {
       raw = JSON.parse(raw);
@@ -158,11 +161,12 @@ export function parseRecordsFile(raw: unknown): ParsedRecordsFile | { error: str
     .map((s, i) => sanitizeSwap(s, i))
     .filter((s): s is ConfirmedSwap => Boolean(s))
     .slice(0, 200);
-  if (plans.length === 0 && swaps.length === 0) {
+  const balances = sanitizeBalances(raw.balances);
+  if (plans.length === 0 && swaps.length === 0 && !opts?.allowEmpty) {
     return { error: "檔案沒有可上存嘅代堂或調堂紀錄" };
   }
   return {
-    balances: sanitizeBalances(raw.balances),
+    balances,
     plans,
     swaps,
     exportedAt: asString(raw.exportedAt) || undefined,

@@ -1,7 +1,7 @@
 /**
  * Build static site for GitHub Pages.
  * Temporarily moves API routes aside (unsupported by next export).
- * Ships encrypted timetable only — plaintext schedule.json never goes to gh-pages.
+ * Ships encrypted timetable + encrypted cover/swap snapshot — plaintext never goes to gh-pages.
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -14,6 +14,10 @@ const publicData = path.join(root, "public", "data");
 const scheduleSrc = path.join(root, "data", "schedule.json");
 const scheduleEnc = path.join(root, "data", "schedule.enc.json");
 const scheduleDest = path.join(publicData, "schedule.enc.json");
+const recordsEnc = path.join(root, "data", "records.enc.json");
+const recordsDest = path.join(publicData, "records.enc.json");
+const coverSrc = path.join(root, "data", "cover.json");
+const swapSrc = path.join(root, "data", "swaps.json");
 const plaintextDest = path.join(publicData, "schedule.json");
 const keyFile = path.join(root, ".site-access-key");
 
@@ -33,6 +37,11 @@ function run(cmd, args, env = {}) {
 
 if (fs.existsSync(scheduleSrc) && (process.env.SITE_ACCESS_KEY || fs.existsSync(keyFile))) {
   run("npx", ["tsx", "scripts/encrypt-schedule.ts"]);
+} else if (
+  (fs.existsSync(coverSrc) || fs.existsSync(swapSrc)) &&
+  (process.env.SITE_ACCESS_KEY || fs.existsSync(keyFile))
+) {
+  run("npx", ["tsx", "scripts/encrypt-records.ts"]);
 }
 
 if (!fs.existsSync(scheduleEnc)) {
@@ -43,6 +52,12 @@ fs.mkdirSync(publicData, { recursive: true });
 fs.copyFileSync(scheduleEnc, scheduleDest);
 if (fs.existsSync(plaintextDest)) fs.rmSync(plaintextDest);
 console.log("copied data/schedule.enc.json -> public/data/schedule.enc.json");
+if (fs.existsSync(recordsEnc)) {
+  fs.copyFileSync(recordsEnc, recordsDest);
+  console.log("copied data/records.enc.json -> public/data/records.enc.json");
+} else if (fs.existsSync(recordsDest)) {
+  fs.rmSync(recordsDest);
+}
 
 const nextDir = path.join(root, ".next");
 if (fs.existsSync(nextDir)) {
@@ -74,6 +89,10 @@ try {
   }
   const leaked = path.join(outDir, "data", "schedule.json");
   if (fs.existsSync(leaked)) fs.rmSync(leaked);
+  for (const name of ["cover.json", "swaps.json"]) {
+    const extra = path.join(outDir, "data", name);
+    if (fs.existsSync(extra)) fs.rmSync(extra);
+  }
   if (!fs.existsSync(path.join(outDir, "data", "schedule.enc.json"))) {
     throw new Error("static export missing encrypted timetable");
   }

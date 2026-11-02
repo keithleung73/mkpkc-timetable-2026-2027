@@ -161,7 +161,7 @@ export function RecordsFileCard({
           上存代調堂紀錄
         </CardTitle>
         <CardDescription>
-          下載完整代堂／調堂紀錄檔（.json），再喺另一部電腦或瀏覽器上載入帳；亦可直接上載學務部《通知各部門調堂代堂安排》Excel。JSON
+          下載完整代堂／調堂紀錄檔（.json），再喺另一部電腦、電話或瀏覽器上載入帳。WhatsApp 網上版每位裝置分開記結餘，所以上存或「更新網站」之後電話先睇到同電腦一樣嘅 ±。亦可直接上載學務部《通知各部門調堂代堂安排》Excel。JSON
           覆蓋會取代而家嘅紀錄，合併只覆蓋檔案入面嗰幾日；通知表則按日期覆蓋該幾日舊紀錄。
         </CardDescription>
       </CardHeader>

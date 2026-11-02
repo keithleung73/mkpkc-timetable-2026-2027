@@ -16,3 +16,7 @@ export function scheduleDataUrl() {
   if (isStaticExport) return withBasePath("/data/schedule.enc.json");
   return "/api/schedule";
 }
+
+export function recordsDataUrl() {
+  return withBasePath("/data/records.enc.json");
+}

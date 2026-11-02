@@ -18,6 +18,7 @@ import {
   saveSwapStore,
 } from "./browser-records";
 import { isStaticExport } from "./runtime";
+import { hydratePublishedRecords } from "./records-snapshot";
 import { coverDateError } from "./school-calendar";
 import { planTeacherLeaveSwaps } from "./swap";
 import {
@@ -389,7 +390,14 @@ export async function swapRequest(
   method: "GET" | "POST" = body ? "POST" : "GET",
 ) {
   if (isStaticExport) {
-    if (method === "GET") return localSwapGet();
+    if (method === "GET") {
+      try {
+        await hydratePublishedRecords();
+      } catch {
+        /* 用本機已有紀錄 */
+      }
+      return localSwapGet();
+    }
     if (!data) throw new Error("課表未載入");
     const result = localSwapPost(data, body ?? {});
     if ("error" in result && result.error) throw new Error(result.error);
@@ -412,7 +420,14 @@ export async function coverRequest(
   method: "GET" | "POST" = body ? "POST" : "GET",
 ) {
   if (isStaticExport) {
-    if (method === "GET") return localCoverGet();
+    if (method === "GET") {
+      try {
+        await hydratePublishedRecords();
+      } catch {
+        /* 用本機已有紀錄 */
+      }
+      return localCoverGet();
+    }
     if (!data) throw new Error("課表未載入");
     const result = localCoverPost(data, body ?? {});
     if ("error" in result && result.error) throw new Error(result.error);

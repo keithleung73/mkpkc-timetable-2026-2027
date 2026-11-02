@@ -649,7 +649,11 @@ function Inner() {
         <CardContent className="space-y-3">
           <ManualBalanceAdjust teachers={teachers} busy={busy} onAdjust={adjustBalance} />
           {ranking.every((r) => r.balance === 0) ? (
-            <p className="text-sm text-muted-foreground">尚未入帳。確認方案後先會累計，亦可人手加減。</p>
+            <p className="text-sm text-muted-foreground">
+              {isStaticExport
+                ? "網上版每位電話／瀏覽器分開記結餘。學務部電腦見到嘅總數，要「更新網站」一併發布，或喺「代堂及調課記錄」上存紀錄檔。"
+                : "尚未入帳。確認方案後先會累計，亦可人手加減。"}
+            </p>
           ) : (
             <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
               {ranking
