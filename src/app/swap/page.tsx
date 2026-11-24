@@ -48,7 +48,7 @@ export default function SwapPage() {
     <PageBody>
       <PageHeader
         title="調堂安排"
-        description="老師病假／事假／公假要調堂：可即時揀建議再轉入紀錄。公假不計算代堂 ±。已轉入代堂紀錄嘅同事該節會佔用，之後再產生調堂唔會派同一人同一節去另一班。CLP 可以調堂。同一科可兩堂一拼調，但調堂後同一班同一日同一科不能有 4 堂或以上（例如 4A 不能一日上四堂中文）。普通話／戲劇、英文對拆堂若另一位老師在，由該老師合班，不計節數。調堂要課室無人用。可複合多名老師。重摘課不能調堂。"
+        description="老師病假／事假／公假要調堂：可即時揀建議再轉入紀錄。公假不計算代堂 ±。已轉入代堂紀錄嘅同事該節會佔用，之後再產生調堂唔會派同一人同一節去另一班。CLP 可以調堂。同一科可兩堂一拼調，但調堂後同一班同一日同一科不能有 4 堂或以上（例如 4A 不能一日上四堂中文）；連堂一拼唔得時各節仍可分開調。高中選修（例如 S6 X3 會計／生物）要一齊調。有 NCS／IAL 中文嘅班不能同全班中文對調。不要同體育對調。調後老師有 7 堂或以上會標示。普通話／戲劇、英文對拆堂若另一位老師在，由該老師合班，不計節數。調堂要課室無人用。可複合多名老師。重摘課不能調堂。"
       />
       <ScheduleGate>
         <SwapInner />
@@ -242,7 +242,7 @@ function SwapInner() {
         <CardHeader>
           <CardTitle>工作項目：老師病假／事假／公假要調堂安排</CardTitle>
           <CardDescription>
-            1）揀請假種類同日期　2）即時揀建議轉入紀錄　3）CLP 可以調堂　4）同一科兩堂可一拼，但調堂後同一班當日同一科不能 4 堂或以上　5）普通話／戲劇、英文對拆堂由另一位老師合班，不計節數　6）課室同一時間只能一班　7）可複合多名老師　8）重摘課不能調堂
+            1）揀請假種類同日期　2）即時揀建議轉入紀錄　3）CLP 可以調堂　4）同一科兩堂可一拼，但調堂後同一班當日同一科不能 4 堂或以上；一拼唔得可分開調　5）高中選修（S6 X3 等）連並行科目一齊調　6）有 NCS／IAL 中文嘅班不能同全班中文對調；不要同體育對調　7）調後 7 堂或以上會標示　8）普通話／戲劇、英文對拆堂由另一位老師合班，不計節數　9）課室同一時間只能一班　10）可複合多名老師　11）重摘課不能調堂
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -558,6 +558,7 @@ function ResultCard({
             {leaveKind === "official" ? " · 不計±" : ""}
           </Badge>
           {unit.kind === "ial_bundle" ? <Badge variant="outline">IAL 一拼</Badge> : null}
+          {unit.kind === "elective_bundle" ? <Badge variant="outline">選修一拼</Badge> : null}
           {unit.kind === "elective_blocked" ? <Badge variant="outline">選修並行</Badge> : null}
           {unit.kind === "remedial_blocked" ? <Badge variant="outline">重摘課</Badge> : null}
           {unit.kind === "subject_pair" ? <Badge variant="outline">同一科兩堂</Badge> : null}
@@ -629,6 +630,11 @@ function ResultCard({
                       （{formatTimeRange(opt.partnerDay, opt.partnerPeriodId)}）· 對手：
                       {opt.partnerTeacherNames.join("、") || "空堂／CLP"} · {opt.partnerSubjects.join("、")}
                     </span>
+                    {opt.heavyLoadNotes?.length ? (
+                      <span className="mt-1 block text-amber-800 dark:text-amber-200">
+                        {opt.heavyLoadNotes.join("；")}
+                      </span>
+                    ) : null}
                   </span>
                 </label>
               ))}

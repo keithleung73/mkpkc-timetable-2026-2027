@@ -1,5 +1,6 @@
 import {
   COVER_PERIOD_IDS,
+  dayLabel,
   isCoreSubject,
   periodLabel as periodLabelFromConstants,
 } from "./constants";
@@ -9,6 +10,8 @@ import {
   buildCoverDatesByTeacher,
   coverPlanOnDate,
   eligibleCoverTeachers,
+  MAX_OWN_LESSONS,
+  ownTeachingLoadOnDay,
   unpaidCombinePartnerIds,
   weekdayFromIsoDate,
   type CoverAssignment,
@@ -23,10 +26,14 @@ import { schoolClosedReason, swapBlockedReason } from "./school-calendar";
 import { applyConfirmedSwaps, swapSearchDates, type ConfirmedSwap } from "./swap-records";
 import {
   adjacentPeriodPairs,
+  classFormNumber,
+  isIalClassId,
   isPthDramaPair,
+  lessonLooksIal,
   roomsFreeForMove,
   subjectKey,
   swapExceedsClassSubjectDayCap,
+  swapPartnerBlockedReason,
   teacherHasOnlyClpOrFree,
   type SwapMode,
   type SwapPeriodPair,
@@ -38,6 +45,7 @@ export { isCoreSubject };
 export type SwapUnitKind =
   | "normal"
   | "ial_bundle"
+  | "elective_bundle"
   | "elective_blocked"
   | "remedial_blocked"
   | "subject_pair";
@@ -66,6 +74,8 @@ export type SwapMatch = {
   reason: string;
   mode?: SwapMode;
   periodPairs?: SwapPeriodPair[];
+  /** 調後有老師當日正規課 ≥ 7 堂 */
+  heavyLoadNotes?: string[];
 };
 
 export type CoverSuggestion = {
@@ -130,17 +140,10 @@ function lessonTeacherNames(data: ScheduleData, lessons: Lesson[]) {
   return ids.map((id) => teacherName(data, id));
 }
 
-export function isIalClassId(classId: string) {
-  const u = classId.toUpperCase();
-  return u.includes("IAL") || u.endsWith("-IAL");
-}
+export { isIalClassId };
 
 export function lessonHasIal(lesson: Lesson) {
-  return (
-    lesson.classIds.some(isIalClassId) ||
-    /IAL/i.test(lesson.subject) ||
-    Boolean(lesson.note && /IAL/i.test(lesson.note))
-  );
+  return lessonLooksIal(lesson);
 }
 
 export function parallelLessonsForClass(
@@ -196,6 +199,68 @@ export function isBlockedElective(data: ScheduleData, lesson: Lesson): boolean {
   return false;
 }
 
+function lessonSeniorForm(lesson: Lesson): number | null {
+  for (const classId of lesson.classIds) {
+    const form = classFormNumber(classId);
+    if (form != null && form >= 4) return form;
+  }
+  return null;
+}
+
+function looksLikeElectiveSplit(lesson: Lesson): boolean {
+  if (lesson.note?.includes("分組") || lesson.note?.includes("選修")) return true;
+  if (lesson.classIds.length > 1) return true;
+  if (lesson.classIds.some((c) => /G\d/i.test(c))) return true;
+  return false;
+}
+
+/**
+ * 高中 DSE 選修時段（例如 S6 X3 會計／生物／校本／視憑，連 6E 全班生物）：
+ * 同一級同一節非 IAL 選修要一齊調。
+ */
+export function dseElectiveBlockLessons(data: ScheduleData, lesson: Lesson): Lesson[] {
+  if (lessonHasIal(lesson) || lesson.classIds.some(isIalClassId)) return [];
+  if (isRemedialLesson(lesson) || isHomeroomLesson(lesson)) return [];
+  const form = lessonSeniorForm(lesson);
+  if (form == null) return [];
+  const parallel = data.lessons.filter(
+    (l) =>
+      isTeaching(l) &&
+      l.day === lesson.day &&
+      l.periodId === lesson.periodId &&
+      !lessonHasIal(l) &&
+      !l.classIds.some(isIalClassId) &&
+      !isRemedialLesson(l) &&
+      !isHomeroomLesson(l) &&
+      lessonSeniorForm(l) === form,
+  );
+  if (!parallel.some(looksLikeElectiveSplit)) return [];
+  const bundle = parallel.filter((l) => looksLikeElectiveSplit(l) || !isCoreSubject(l.subject));
+  if (bundle.length < 2) return [];
+  if (!bundle.some((l) => l.id === lesson.id)) return [];
+  return bundle;
+}
+
+export function isDseElectiveBundleLesson(data: ScheduleData, lesson: Lesson): boolean {
+  return dseElectiveBlockLessons(data, lesson).length >= 2;
+}
+
+function dseElectiveBlockAt(
+  data: ScheduleData,
+  day: DayId,
+  periodId: string,
+  form: number,
+): Lesson[] {
+  const candidates = data.lessons.filter(
+    (l) => isTeaching(l) && l.day === day && l.periodId === periodId && lessonSeniorForm(l) === form,
+  );
+  for (const candidate of candidates) {
+    const bundle = dseElectiveBlockLessons(data, candidate);
+    if (bundle.length >= 2) return bundle;
+  }
+  return [];
+}
+
 function unitFromLessons(
   data: ScheduleData,
   leaveDate: string,
@@ -210,9 +275,11 @@ function unitFromLessons(
   const label =
     kind === "ial_bundle"
       ? `IAL 一拼調：${subjects.join("、")}`
-      : kind === "subject_pair"
-        ? `同一科兩堂：${subjects.join("、")} ${periodLabelFromConstants(lessons[0]?.periodId ?? periodId)}＋${periodLabelFromConstants(lessons[1]?.periodId ?? periodId)}`
-        : `${subjects.join("、")}（${lessonTeacherNames(data, lessons).join("、")}）`;
+      : kind === "elective_bundle"
+        ? `選修一拼調：${subjects.join("、")}`
+        : kind === "subject_pair"
+          ? `同一科兩堂：${subjects.join("、")} ${periodLabelFromConstants(lessons[0]?.periodId ?? periodId)}＋${periodLabelFromConstants(lessons[1]?.periodId ?? periodId)}`
+          : `${subjects.join("、")}（${lessonTeacherNames(data, lessons).join("、")}）`;
   return {
     id: `${leaveDate}|${day}|${periodId}|${lessons
       .map((l) => l.id)
@@ -276,6 +343,18 @@ export function buildLeaveUnits(
         continue;
       }
 
+      const dseBundle = dseElectiveBlockLessons(data, lesson);
+      if (dseBundle.length >= 2) {
+        const key = `dse|${leaveDate}|${lesson.day}|${lesson.periodId}|${dseBundle
+          .map((l) => l.id)
+          .sort()
+          .join("+")}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        units.push(unitFromLessons(data, leaveDate, day, lesson.periodId, dseBundle, "elective_bundle"));
+        continue;
+      }
+
       if (isBlockedElective(data, lesson)) {
         const key = `block|${lesson.id}|${leaveDate}`;
         if (seen.has(key)) continue;
@@ -299,6 +378,7 @@ export function buildLeaveUnits(
           !isHomeroomLesson(l) &&
           !isRemedialLesson(l) &&
           !lessonHasIal(l) &&
+          !isDseElectiveBundleLesson(data, l) &&
           !isBlockedElective(data, l),
       )
       .sort((a, b) => coverPeriods(day).indexOf(a.periodId) - coverPeriods(day).indexOf(b.periodId));
@@ -377,6 +457,79 @@ function pushMatch(
   return matches.length >= MAX_SWAP_OPTIONS;
 }
 
+function partnersAllowed(
+  data: ScheduleData,
+  leaveLessons: Lesson[],
+  partnerLessons: Lesson[],
+): boolean {
+  return swapPartnerBlockedReason(data, leaveLessons, partnerLessons) == null;
+}
+
+function projectedOwnLoad(
+  data: ScheduleData,
+  teacherId: string,
+  day: DayId,
+  incomingCount: number,
+  outgoingIds: Set<string>,
+): number {
+  const stay = ownTeachingLoadOnDay(data, teacherId, day);
+  const outgoing = data.lessons.filter(
+    (l) =>
+      outgoingIds.has(l.id) &&
+      l.day === day &&
+      l.teacherIds.includes(teacherId) &&
+      isTeaching(l) &&
+      !isHomeroomLesson(l),
+  ).length;
+  return stay - outgoing + incomingCount;
+}
+
+function annotateSwapMatch(
+  data: ScheduleData,
+  unit: SwapUnit,
+  leaveTeacherId: string,
+  match: SwapMatch,
+): SwapMatch {
+  if (match.mode === "clp") return match;
+  const partnerTeaching = match.partnerLessons.filter((l) => isTeaching(l) && !isClpSubject(l.subject));
+  const notes: string[] = [];
+  const warn = (tid: string, day: DayId, after: number) => {
+    if (after <= MAX_OWN_LESSONS) return;
+    const text = `${teacherName(data, tid)} ${dayLabel(day)}調後有 ${after} 堂`;
+    if (!notes.includes(text)) notes.push(text);
+  };
+
+  const leaveOutgoing = new Set(unit.lessons.map((l) => l.id));
+  warn(
+    leaveTeacherId,
+    unit.day,
+    projectedOwnLoad(data, leaveTeacherId, unit.day, 0, leaveOutgoing),
+  );
+  warn(
+    leaveTeacherId,
+    match.partnerDay,
+    projectedOwnLoad(
+      data,
+      leaveTeacherId,
+      match.partnerDay,
+      partnerTeaching.filter((l) => !l.teacherIds.includes(leaveTeacherId)).length,
+      new Set(),
+    ),
+  );
+
+  const incomingOnLeave = unit.lessons.filter((l) => isTeaching(l) && !isHomeroomLesson(l)).length;
+  for (const tid of [...new Set(match.partnerTeacherIds)]) {
+    if (tid === leaveTeacherId) continue;
+    const giveUpIds = new Set(
+      partnerTeaching.filter((l) => l.teacherIds.includes(tid)).map((l) => l.id),
+    );
+    warn(tid, unit.day, projectedOwnLoad(data, tid, unit.day, incomingOnLeave, new Set()));
+    warn(tid, match.partnerDay, projectedOwnLoad(data, tid, match.partnerDay, 0, giveUpIds));
+  }
+
+  return notes.length ? { ...match, heavyLoadNotes: notes } : match;
+}
+
 function findNormalSwaps(
   data: ScheduleData,
   unit: SwapUnit,
@@ -410,9 +563,10 @@ function findNormalSwaps(
           !l.teacherIds.includes(leaveTeacherId) &&
           !isRemedialLesson(l) &&
           !lessonHasIal(l) &&
-          !isBlockedElective(data, l),
+          !isBlockedElective(data, l) &&
+          !isDseElectiveBundleLesson(data, l),
       );
-      if (partners.length > 0 && !isPthDramaPair(partners)) {
+      if (partners.length > 0 && !isPthDramaPair(partners) && partnersAllowed(data, unit.lessons, partners)) {
         const ignoreBoth = new Set([...ignoreLeaveOnPartnerDay, ...partners.map((l) => l.id)]);
         const partnerTeachers = [...new Set(partners.flatMap((l) => l.teacherIds))];
         if (
@@ -560,8 +714,16 @@ function findSubjectPairSwaps(
       );
       if (partnersA.length < 1 || partnersB.length < 1) continue;
       if (isPthDramaPair([...partnersA, ...partnersB])) continue;
+      if (
+        [...partnersA, ...partnersB].some(
+          (l) => isBlockedElective(data, l) || isDseElectiveBundleLesson(data, l) || lessonHasIal(l),
+        )
+      ) {
+        continue;
+      }
 
       const partners = [...partnersA, ...partnersB];
+      if (!partnersAllowed(data, unit.lessons, partners)) continue;
       const ignoreBoth = new Set([...ignoreLeaveOnPartnerDay, ...partners.map((l) => l.id)]);
       const partnerTeachers = [...new Set(partners.flatMap((l) => l.teacherIds))];
       const teachersA = [...new Set(partnersA.flatMap((l) => l.teacherIds))];
@@ -650,6 +812,7 @@ function findIalBundleSwaps(
       if (partnerBundle.length < 1) continue;
       if (partnerBundle.some(isRemedialLesson)) continue;
       if (partnerBundle.every((l) => ignoreLeaveOnPartnerDay.has(l.id))) continue;
+      if (!partnersAllowed(data, unit.lessons, partnerBundle)) continue;
 
       const partnerTeachers = [...new Set(partnerBundle.flatMap((l) => l.teacherIds))];
       const ignorePartner = new Set(partnerBundle.map((l) => l.id));
@@ -691,6 +854,83 @@ function findIalBundleSwaps(
         partnerTeacherIds: partnerTeachers,
         partnerTeacherNames: lessonTeacherNames(data, partnerBundle),
         reason: `IAL 整組對調：${unit.subjects.join("、")} ⇄ ${[
+          ...new Set(partnerBundle.map((l) => l.subject)),
+        ].join("、")}`,
+      });
+      if (matches.length >= MAX_SWAP_OPTIONS) return matches;
+    }
+  }
+  return matches;
+}
+
+function findElectiveBundleSwaps(
+  data: ScheduleData,
+  unit: SwapUnit,
+  leaveTeacherId: string,
+  searchDates: string[],
+): SwapMatch[] {
+  const seed = unit.lessons[0];
+  if (!seed) return [];
+  const form = lessonSeniorForm(seed);
+  if (form == null) return [];
+
+  const ignoreMine = new Set(unit.lessons.map((l) => l.id));
+  const myTeachers = [...new Set(unit.lessons.flatMap((l) => l.teacherIds))];
+  const matches: SwapMatch[] = [];
+  const seen = new Set<string>();
+
+  for (const partnerDate of searchDates) {
+    const day = weekdayFromIsoDate(partnerDate);
+    if (!day) continue;
+    const sameWeekdayOtherDate = day === unit.day && partnerDate !== unit.leaveDate;
+    const ignoreLeaveOnPartnerDay = sameWeekdayOtherDate ? new Set<string>() : ignoreMine;
+
+    for (const periodId of coverPeriods(day)) {
+      if (partnerDate === unit.leaveDate && periodId === unit.periodId) continue;
+
+      const partnerBundle = dseElectiveBlockAt(data, day, periodId, form);
+      if (partnerBundle.length < 2) continue;
+      if (partnerBundle.some(isRemedialLesson)) continue;
+      if (partnerBundle.every((l) => ignoreLeaveOnPartnerDay.has(l.id))) continue;
+      if (!partnersAllowed(data, unit.lessons, partnerBundle)) continue;
+
+      const partnerTeachers = [...new Set(partnerBundle.flatMap((l) => l.teacherIds))];
+      const ignorePartner = new Set(partnerBundle.map((l) => l.id));
+
+      if (!allTeachersFreeIgnoring(data, myTeachers, day, periodId, ignoreLeaveOnPartnerDay)) {
+        continue;
+      }
+      if (!allTeachersFreeIgnoring(data, partnerTeachers, unit.day, unit.periodId, ignorePartner)) {
+        continue;
+      }
+      const ignoreBoth = new Set([...ignoreLeaveOnPartnerDay, ...partnerBundle.map((l) => l.id)]);
+      if (!roomsFreeForMove(data, unit.lessons, day, periodId, ignoreBoth)) continue;
+      if (!roomsFreeForMove(data, partnerBundle, unit.day, unit.periodId, ignoreBoth)) continue;
+      if (
+        swapExceedsClassSubjectDayCap(data, unit.day, day, unit.lessons, partnerBundle, [
+          { leavePeriodId: unit.periodId, partnerPeriodId: periodId },
+        ])
+      ) {
+        continue;
+      }
+      if (!myTeachers.includes(leaveTeacherId)) continue;
+
+      const key = `${partnerDate}|${periodId}|${partnerBundle
+        .map((l) => l.id)
+        .sort()
+        .join("+")}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      matches.push({
+        partnerLessons: partnerBundle,
+        partnerDay: day,
+        partnerDate,
+        partnerPeriodId: periodId,
+        partnerSubjects: [...new Set(partnerBundle.map((l) => l.subject))],
+        partnerTeacherIds: partnerTeachers,
+        partnerTeacherNames: lessonTeacherNames(data, partnerBundle),
+        mode: "elective_bundle",
+        reason: `選修整組對調：${unit.subjects.join("、")} ⇄ ${[
           ...new Set(partnerBundle.map((l) => l.subject)),
         ].join("、")}`,
       });
@@ -844,9 +1084,13 @@ export function planTeacherLeaveSwaps(
   };
 
   const filterSwaps = (unit: SwapUnit, matches: SwapMatch[]) =>
-    matches.filter((m) => !swapMatchBlockedByCover(m, unit, ctx)).slice(0, MAX_SWAP_OPTIONS);
+    matches
+      .map((m) => annotateSwapMatch(data, unit, teacherId, m))
+      .filter((m) => !swapMatchBlockedByCover(m, unit, ctx))
+      .sort((a, b) => (a.heavyLoadNotes?.length ?? 0) - (b.heavyLoadNotes?.length ?? 0))
+      .slice(0, MAX_SWAP_OPTIONS);
 
-  const results: SwapUnitResult[] = units.map((unit) => {
+  const mapped: Array<SwapUnitResult | null> = units.map((unit) => {
     const calendarBlock = swapBlockedReason(unit.leaveDate);
     if (calendarBlock) {
       return {
@@ -902,18 +1146,18 @@ export function planTeacherLeaveSwaps(
           blockers: [],
         };
       }
-      return {
-        unit,
-        status: "cover" as const,
-        coverSuggestions: coversFor(unit),
-        blockers: ["搵唔到可一拼對調嘅同一科兩堂（對方連堂、雙方得閒、課室無人用）。"],
-      };
+      notes.push(
+        `${unit.leaveDate} ${unit.label} 不能一拼對調（多數因為調後該班當日會超過 3 堂同一科）。各節可分開調。`,
+      );
+      return null;
     }
 
     const found =
       unit.kind === "ial_bundle"
         ? findIalBundleSwaps(data, unit, teacherId, searchDates)
-        : findNormalSwaps(data, unit, teacherId, searchDates);
+        : unit.kind === "elective_bundle"
+          ? findElectiveBundleSwaps(data, unit, teacherId, searchDates)
+          : findNormalSwaps(data, unit, teacherId, searchDates);
     const swaps = filterSwaps(unit, found);
 
     if (swaps.length > 0) {
@@ -932,7 +1176,11 @@ export function planTeacherLeaveSwaps(
         ? [
             "搵唔到可一拼對調嘅 IAL 選修時段（目標節要成組得閒，且請假老師唔喺其他請假日授課）。",
           ]
-        : ["搵唔到同班可對調、而且雙方老師都得閒嘅節次。"];
+        : unit.kind === "elective_bundle"
+          ? [
+              "高中選修時段要連同並行選修（例如 S6 X3 會計／生物）一齊調；搵唔到成組得閒嘅對手時段，請改代堂。",
+            ]
+          : ["搵唔到同班可對調、而且雙方老師都得閒嘅節次。"];
 
     return {
       unit,
@@ -941,6 +1189,7 @@ export function planTeacherLeaveSwaps(
       blockers,
     };
   });
+  const results = mapped.filter((r): r is SwapUnitResult => r != null);
 
   return {
     teacherId,

@@ -6,7 +6,7 @@ import type { DayId, Lesson, ScheduleData, Teacher } from "./types";
 /** 調堂後同一班同一日同一科最多 3 堂（例如 4A 不能一日上四堂中文） */
 export const MAX_SAME_SUBJECT_PER_CLASS_PER_DAY = 3;
 
-export type SwapMode = "period" | "clp" | "split_rotate" | "subject_pair";
+export type SwapMode = "period" | "clp" | "split_rotate" | "subject_pair" | "elective_bundle";
 
 export type SwapPeriodPair = {
   leavePeriodId: string;
@@ -18,6 +18,80 @@ export function subjectKey(subject: string): string {
   if (s === "普話" || s.includes("普通話")) return "普通話";
   if (s.includes("戲劇")) return "戲劇";
   return s;
+}
+
+export function isIalClassId(classId: string): boolean {
+  const u = classId.toUpperCase();
+  return u.includes("IAL") || u.endsWith("-IAL");
+}
+
+export function lessonLooksIal(lesson: Pick<Lesson, "classIds" | "subject" | "note">): boolean {
+  return (
+    lesson.classIds.some(isIalClassId) ||
+    /IAL/i.test(lesson.subject) ||
+    Boolean(lesson.note && /IAL/i.test(lesson.note))
+  );
+}
+
+export function isPeSubject(subject: string): boolean {
+  return subject.replace(/\s+/g, "").includes("體育");
+}
+
+export function isChineseSubject(subject: string): boolean {
+  const s = subject.replace(/\s+/g, "");
+  return s === "中文" || s.includes("中國語文") || s.includes("中文");
+}
+
+/** 1A / 6E-IAL → 1 / 6 */
+export function classFormNumber(classId: string): number | null {
+  const m = /^([1-6])/.exec(classId);
+  return m ? Number(m[1]) : null;
+}
+
+/** 該班有冇 IAL／NCS 中文分流（例如 6E-IAL 中文） */
+export function classHasNcsChineseStream(data: ScheduleData, classId: string): boolean {
+  const base = classId.replace(/-IAL$/i, "");
+  return data.lessons.some(
+    (l) =>
+      isTeachingLesson(l) &&
+      isChineseSubject(l.subject) &&
+      l.classIds.some((c) => isIalClassId(c) && c.replace(/-IAL$/i, "") === base),
+  );
+}
+
+/**
+ * 對手課堂不能調：體育；以及有 NCS／IAL 中文分流嘅班，不能同全班中文互調。
+ * 空堂／CLP 唔算對手課堂。
+ */
+export function swapPartnerBlockedReason(
+  data: ScheduleData,
+  leaveLessons: Lesson[],
+  partnerLessons: Lesson[],
+): string | null {
+  const teachingPartners = partnerLessons.filter((l) => isTeachingLesson(l) && !isClpSubject(l.subject));
+  if (teachingPartners.length === 0) return null;
+  if (
+    leaveLessons.some((l) => isPeSubject(l.subject)) ||
+    teachingPartners.some((l) => isPeSubject(l.subject))
+  ) {
+    return "不要同體育對調";
+  }
+
+  const sides: [Lesson[], Lesson[]][] = [
+    [leaveLessons, teachingPartners],
+    [teachingPartners, leaveLessons],
+  ];
+  for (const [chineseSide, otherSide] of sides) {
+    for (const ch of chineseSide) {
+      if (!isChineseSubject(ch.subject) || lessonLooksIal(ch)) continue;
+      const ncsIds = ch.classIds.filter((c) => !isIalClassId(c) && classHasNcsChineseStream(data, c));
+      if (ncsIds.length === 0) continue;
+      if (otherSide.some((l) => classesOverlap(l.classIds, ncsIds))) {
+        return "該班中文有 NCS／IAL 中文，不能同全班中文對調";
+      }
+    }
+  }
+  return null;
 }
 
 export function isPutonghuaSubject(subject: string): boolean {
@@ -282,6 +356,7 @@ export function swapModeLabel(mode?: SwapMode): string | null {
   if (mode === "clp") return "CLP";
   if (mode === "split_rotate") return "對拆輪換";
   if (mode === "subject_pair") return "同一科兩堂";
+  if (mode === "elective_bundle") return "選修一拼";
   return null;
 }
 

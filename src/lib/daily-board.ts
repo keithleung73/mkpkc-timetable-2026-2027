@@ -45,7 +45,7 @@ export type DailyArrangementLine = {
   detail: string;
 };
 
-const SWAPABLE_UNIT = new Set(["normal", "ial_bundle", "subject_pair"]);
+const SWAPABLE_UNIT = new Set(["normal", "ial_bundle", "elective_bundle", "subject_pair"]);
 
 export function handleStatusLabel(status: HandleStatus): string {
   if (status === "done") return "已處理";
