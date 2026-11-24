@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { eligibleCoverTeachers, generateCoverPlan, isOccupied, mergeCoverSlotIntoPlan, teachingLessonsOnDay } from "../src/lib/cover";
 import { isFree } from "../src/lib/queries";
 import { isNonRegularLesson, isRemedialLesson, lessonOccupiesTeacher } from "../src/lib/lesson-kind";
-import { planTeacherLeaveSwaps } from "../src/lib/swap";
+import { dseElectiveBlockLessons, planTeacherLeaveSwaps } from "../src/lib/swap";
 import {
   applyConfirmedSwaps,
   confirmedSwapManual,
@@ -531,7 +531,12 @@ const 乙 = teacher("乙", "乙老師");
     "2E 數學連堂對調中文後星期四會有 4 堂中文，不能建議",
   );
   const pair = plan.results.find((r) => r.unit.kind === "subject_pair" && r.unit.periodId === "p7");
-  assert.ok(pair, "2D 數學第七、八節應成同一科兩堂");
+  assert.ok(!pair, "2D 數學第七、八節一拼會超班科上限時，不應硬列連堂");
+  assert.ok(
+    plan.results.some((r) => r.unit.kind === "normal" && r.unit.periodId === "p7") &&
+      plan.results.some((r) => r.unit.kind === "normal" && r.unit.periodId === "p8"),
+    "2D 數學第七、八節仍可分開調",
+  );
 
   const yu = planTeacherLeaveSwaps(live, "余", ["2026-09-08"], "2026-09-08");
   const pthUnits = yu.results.filter((r) => r.unit.subjects.some((s) => /普話|普通話/.test(s)));
@@ -633,6 +638,152 @@ const 乙 = teacher("乙", "乙老師");
     !(hit?.coverSuggestions ?? []).some((c) => c.teacherId === "乙"),
     "人手已安排乙代第六節後，電產生調堂不能再派乙代另一班第六節",
   );
+}
+
+{
+  const 思 = teacher("思", "張思華");
+  const 馮 = teacher("馮", "馮耀强");
+  const 異 = teacher("異", "黃天異");
+  const 莫 = teacher("莫", "莫菁兒");
+  const 皓 = teacher("皓", "劉以皓");
+  const 體 = teacher("體", "體育老師");
+  const 丙 = teacher("丙", "丙老師");
+  const data = schedule(
+    [思, 馮, 異, 莫, 皓, 體, 丙],
+    [
+      lesson("sci-1", "fri", "p1", "思", { classIds: ["1C"], subject: "科學", roomId: "301" }),
+      lesson("sci-2", "fri", "p2", "思", { classIds: ["1C"], subject: "科學", roomId: "301" }),
+      lesson("bio-x3", "fri", "p5", "思", { classIds: ["6E"], subject: "生物", roomId: "Lab6" }),
+      lesson("acc-x3", "fri", "p5", "馮", {
+        classIds: ["6A", "6B", "6C", "6D"],
+        subject: "會計",
+        roomId: "401",
+        note: "分組",
+      }),
+      lesson("chi-6e", "fri", "p3", "異", { classIds: ["6E"], subject: "中文", roomId: "602" }),
+      lesson("chi-ncs", "fri", "p3", "莫", { classIds: ["6E-IAL"], subject: "IAL 中文", roomId: "603" }),
+      lesson("pe-1c", "mon", "p1", "體", { classIds: ["1C"], subject: "體育", roomId: "GYM" }),
+      lesson("va-3", "mon", "p3", "皓", { classIds: ["1C"], subject: "視藝", roomId: "VA1" }),
+      lesson("va-4", "mon", "p4", "皓", { classIds: ["1C"], subject: "視藝", roomId: "VA1" }),
+      lesson("sci-mon5", "mon", "p5", "丙", { classIds: ["1C"], subject: "科學", roomId: "302" }),
+      lesson("sci-mon6", "mon", "p6", "丙", { classIds: ["1C"], subject: "科學", roomId: "302" }),
+      lesson("bing-fri1", "fri", "p1", "丙", { classIds: ["2D"], subject: "數學", roomId: "305" }),
+      lesson("bing-fri2", "fri", "p2", "丙", { classIds: ["2D"], subject: "數學", roomId: "305" }),
+    ],
+  );
+
+  const x3 = dseElectiveBlockLessons(data, data.lessons.find((l) => l.id === "bio-x3")!);
+  assert.ok(x3.some((l) => l.subject === "會計"), "6E 生物應連 S6 X3 會計一齊調");
+
+  const plan = planTeacherLeaveSwaps(data, "思", ["2026-12-18"], "2026-12-18");
+  const bio = plan.results.find((r) => r.unit.periodId === "p5");
+  assert.equal(bio?.unit.kind, "elective_bundle", "星期五第五節應成選修一拼");
+  assert.ok(bio?.unit.subjects.includes("會計"));
+  assert.ok(
+    !(bio?.swaps ?? []).some((s) => s.partnerSubjects.some((sub) => sub.includes("中文"))),
+    "6E 生物不能同有 NCS 嘅 6E 中文對調",
+  );
+
+  const p1 = plan.results.find((r) => r.unit.kind === "normal" && r.unit.periodId === "p1");
+  const p2 = plan.results.find((r) => r.unit.kind === "normal" && r.unit.periodId === "p2");
+  assert.equal(p1?.status, "swap", "第一節科學可分開調");
+  assert.equal(p2?.status, "swap", "第二節科學可分開調");
+  assert.ok(
+    (p1?.swaps ?? []).some((s) => s.partnerPeriodId === "p3" && s.partnerTeacherIds.includes("皓")),
+  );
+  assert.ok(
+    !(p1?.swaps ?? []).some((s) => s.partnerSubjects.some((sub) => sub.includes("體育"))),
+    "不要同體育對調",
+  );
+  assert.ok(
+    !plan.results.some((r) => r.unit.kind === "subject_pair" && r.unit.periodId === "p1"),
+    "1+2 科學一拼會令星期一有 4 堂科學，不應列作要代堂嘅連堂",
+  );
+  assert.ok(plan.notes.some((n) => n.includes("不能一拼對調")));
+
+  const peBlocked = confirmedSwapManual(data, {
+    leaveTeacherId: "思",
+    leaveDate: "2026-12-18",
+    leavePeriodId: "p1",
+    partnerDate: "2026-12-21",
+    partnerPeriodId: "p1",
+    partnerTeacherId: "體",
+  });
+  assert.ok("error" in peBlocked);
+  if ("error" in peBlocked) assert.match(peBlocked.error, /體育/);
+
+  const ncsBlocked = confirmedSwapManual(data, {
+    leaveTeacherId: "思",
+    leaveDate: "2026-12-18",
+    leavePeriodId: "p5",
+    partnerDate: "2026-12-18",
+    partnerPeriodId: "p3",
+    partnerTeacherId: "異",
+  });
+  assert.ok("error" in ncsBlocked);
+  if ("error" in ncsBlocked) assert.match(ncsBlocked.error, /NCS/);
+}
+
+{
+  const 鳳 = teacher("鳳", "黃轉鳳");
+  const 朱 = teacher("會", "朱會強");
+  const data = schedule(
+    [鳳, 朱],
+    [
+      lesson("hist-5", "thu", "p5", "鳳", { classIds: ["2A"], subject: "中史", roomId: "201" }),
+      lesson("hist-6", "thu", "p6", "鳳", { classIds: ["2A"], subject: "中史", roomId: "201" }),
+      lesson("geo-7", "fri", "p7", "會", { classIds: ["2A"], subject: "地理", roomId: "202" }),
+      lesson("geo-8", "fri", "p8", "會", { classIds: ["2A"], subject: "地理", roomId: "202" }),
+      lesson("zhu-1", "thu", "p1", "會", { classIds: ["2D"], subject: "地理", roomId: "305" }),
+      lesson("zhu-2", "thu", "p2", "會", { classIds: ["2D"], subject: "地理", roomId: "305" }),
+      lesson("zhu-3", "thu", "p3", "會", { classIds: ["1A"], subject: "地理", roomId: "201" }),
+      lesson("zhu-4", "thu", "p4", "會", { classIds: ["1A"], subject: "地理", roomId: "201" }),
+      lesson("zhu-7", "thu", "p7", "會", { classIds: ["1C"], subject: "地理", roomId: "301" }),
+      lesson("zhu-8", "thu", "p8", "會", { classIds: ["1C"], subject: "地理", roomId: "301" }),
+    ],
+  );
+  const plan = planTeacherLeaveSwaps(data, "鳳", ["2026-12-03"], "2026-12-03");
+  const pair = plan.results.find((r) => r.unit.kind === "subject_pair" && r.unit.periodId === "p5");
+  const hit = pair?.swaps?.find((s) => s.partnerTeacherIds.includes("會"));
+  assert.ok(hit, "2A 中史可對調朱會強地理");
+  assert.ok(
+    hit?.heavyLoadNotes?.some((n) => n.includes("8 堂")),
+    "調後朱會強星期四有 8 堂應標示",
+  );
+}
+
+{
+  const live = prepareSchedule(
+    JSON.parse(readFileSync("data/schedule.json", "utf8")) as ScheduleData,
+  );
+  const si = planTeacherLeaveSwaps(live, "思", ["2026-12-18"], "2026-12-18");
+  const bio = si.results.filter((r) => r.unit.subjects.includes("生物") && r.unit.kind === "elective_bundle");
+  assert.ok(bio.length > 0, "正式課表 18/12 張思華 6E 生物應連 X3 選修一拼");
+  assert.ok(bio.some((r) => r.unit.subjects.some((s) => s.includes("會計"))));
+  assert.ok(
+    bio.every((r) => !(r.swaps ?? []).some((s) => s.partnerSubjects.some((sub) => /中文/.test(sub)))),
+    "正式課表 6E 生物不能同中文對調",
+  );
+  assert.ok(
+    si.results
+      .filter((r) => r.unit.kind === "normal" && r.unit.subjects.includes("科學"))
+      .every((r) => !(r.swaps ?? []).some((s) => s.partnerSubjects.some((sub) => sub.includes("體育")))),
+    "正式課表不要同體育對調",
+  );
+  assert.ok(
+    !si.results.some((r) => r.unit.kind === "subject_pair" && r.unit.periodId === "p1"),
+    "正式課表 1C 科學 1+2 不能一拼時不應硬要連堂代堂",
+  );
+
+  const feng = planTeacherLeaveSwaps(live, "鳳", ["2026-12-03"], "2026-12-03");
+  const pair = feng.results.find((r) => r.unit.kind === "subject_pair" && r.unit.subjects.includes("中史"));
+  const zhu = pair?.swaps?.find((s) => s.partnerTeacherIds.includes("會"));
+  if (zhu) {
+    assert.ok(
+      zhu.heavyLoadNotes?.some((n) => /8 堂/.test(n)),
+      "正式課表 2A 中史對調地理後朱會強應標示 8 堂",
+    );
+  }
 }
 
 console.log("swap / CLP / confirmed timetable ok");

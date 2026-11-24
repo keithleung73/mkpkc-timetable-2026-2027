@@ -5,6 +5,7 @@ import { isSwapAllowedDate, swapBlockedReason, swapPairError } from "./school-ca
 import {
   roomsFreeForMove,
   swapExceedsClassSubjectDayCap,
+  swapPartnerBlockedReason,
   type SwapMode,
   type SwapPeriodPair,
 } from "./swap-rules";
@@ -157,6 +158,8 @@ export function confirmedSwapFromSuggestion(
   if (leaveLessons.some(isRemedialLesson) || partnerLessons.filter((l) => !isClpSubject(l.subject)).some(isRemedialLesson)) {
     return { error: "重摘課不能調堂" };
   }
+  const partnerLessonBlock = swapPartnerBlockedReason(data, leaveLessons, partnerLessons);
+  if (partnerLessonBlock) return { error: partnerLessonBlock };
   const resolvedMode: SwapMode =
     mode ??
     (partnerLessons.length > 0 && partnerLessons.every((l) => isClpSubject(l.subject))
